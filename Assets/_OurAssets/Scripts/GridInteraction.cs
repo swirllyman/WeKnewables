@@ -1,9 +1,11 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 public class GridInteraction : MonoBehaviour
 {
+    public static GridInteraction singleton;
     public Camera mainCam;
 
     public enum SelectionMode { Build, Select}
@@ -11,9 +13,22 @@ public class GridInteraction : MonoBehaviour
 
     public Transform selectionTransform;
 
-    Cell currentCell;
+    internal Cell currentCell;
+    internal List<Cell> currentPlacementCells = new List<Cell>();
     Cell selectedCell;
     RaycastHit2D hit;
+
+    List<Cell> currentStructures = new List<Cell>();
+
+    private void Awake()
+    {
+        if(singleton != null)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        singleton = this;
+    }
 
     void Start()
     {
@@ -25,7 +40,7 @@ public class GridInteraction : MonoBehaviour
 
     void Update()
     {
-        CheckCurrentCell();
+        CheckMouseCell();
         if(currentSelectionMode == SelectionMode.Build)
         {
             CheckInput();
@@ -35,106 +50,252 @@ public class GridInteraction : MonoBehaviour
             CheckSelection();
             if(selectedCell != null)
             {
-                selectionTransform.position = selectedCell.transform.position;
+                selectionTransform.position = selectedCell.GetMidPoint();
+                selectionTransform.localScale = Vector3.one * .75f * (selectedCell.structureProperty.size + ((selectedCell.structureProperty.size - 1) * .25f));
             }
         }
     }
 
     #region Current Cell Raycast
-    void CheckCurrentCell()
+
+    void CheckMouseCell()
     {
         hit = Physics2D.Raycast(mainCam.ScreenToWorldPoint(Input.mousePosition), Vector2.zero);
-
-        bool removeCurrentCell = false;
-        if (hit.collider != null)
+        if (hit.collider != null && hit.transform.CompareTag("Selectable"))
         {
-            if (hit.transform.CompareTag("Selectable"))
+            Cell hitCell = hit.transform.GetComponent<Cell>();
+            if(hitCell != currentCell)
             {
-                Cell hitCell = hit.transform.GetComponent<Cell>();
-                if (currentCell != null && hitCell != currentCell)
-                {
-                    currentCell.ToggleHighlight(false);
-
-                    if (!currentCell.hasStructure)
-                    {
-                        SetCurrentCell(hitCell, currentSelectionMode == SelectionMode.Build);
-                    }
-                    else
-                    {
-                        removeCurrentCell = true;
-                    }
-                }
-                else if (currentCell == null & !hitCell.hasStructure)
-                {
-                    SetCurrentCell(hitCell, currentSelectionMode == SelectionMode.Build);
-                }
-            }
-            else if (currentCell != null)
-            {
-                removeCurrentCell = true;
+                SetCurrentCell(hitCell);
             }
         }
-        else
+        else if (currentCell != null)
         {
-            if (currentCell != null)
+            if(currentPlacementCells.Count > 0)
             {
-                removeCurrentCell = true;
+                ToggleCellHighlights(false);
+                currentPlacementCells.Clear();
             }
-        }
-
-        if (removeCurrentCell)
-        {
-            currentCell.ToggleHighlight(false);
             currentCell = null;
         }
     }
-    void SetCurrentCell(Cell cell, bool highlight)
+
+    void SetCurrentCell(Cell cell)
     {
+
+        ToggleCellHighlights(false);
+        currentPlacementCells.Clear();
+
         currentCell = cell;
-        if (highlight)
+
+        if(currentSelectionMode == SelectionMode.Build)
         {
-            if (currentCell.placeableArea)
-                currentCell.ToggleHighlight(true);
+            currentPlacementCells.Add(currentCell);
+            if(GameManager.currentStructure.size > 1)
+            {
+                if (!BuildableArea())
+                {
+                    currentCell.SetBuildable(false);
+                }
+            }
             else
-                currentCell.ToggleRedHighlight();
+            {
+                ToggleCellHighlights(true);
+            }
         }
+    }
+
+    void ToggleCellHighlights(bool toggle)
+    {
+        for (int i = 0; i < currentPlacementCells.Count; i++)
+        {
+            if (!toggle)
+            {
+                currentPlacementCells[i].DisableHighlight();
+            }
+            else
+            {
+                if (GameManager.currentStructure.waterStructure)
+                    currentPlacementCells[i].SetBuildable(currentPlacementCells[i].waterArea & !currentPlacementCells[i].hasStructure & !currentPlacementCells[i].isChild);
+                else if(GameManager.currentStructure.powerStructure)
+                    currentPlacementCells[i].SetBuildable(currentPlacementCells[i].placeableArea &! currentPlacementCells[i].hasStructure &! currentPlacementCells[i].isChild &!currentPlacementCells[i].waterArea);
+                else
+                    currentPlacementCells[i].SetBuildable(currentPlacementCells[i].placeableArea & !currentPlacementCells[i].hasStructure & !currentPlacementCells[i].isChild && currentPlacementCells[i].isPowered & !currentPlacementCells[i].waterArea);
+                //if (currentPlacementCells[i].placeableArea &! currentPlacementCells[i].hasStructure)
+                //    currentPlacementCells[i].ToggleHighlight(true);
+                //else
+                //    currentPlacementCells[i].SetBuildable(false);
+            }
+        }
+    }
+
+    bool BuildableArea()
+    {
+        if(currentCell.y + GameManager.currentStructure.size - 1 >= Grid.singleton.cellArray.Length)
+        {
+            Debug.Log("Rows out of range");
+            currentCell.SetBuildable(false);
+            return false;
+        }
+
+        if (currentCell.x + GameManager.currentStructure.size - 1 >= Grid.singleton.cellArray[currentCell.y + GameManager.currentStructure.size - 1].cells.Length)
+        {
+            Debug.Log("Cols out of range");
+            currentCell.SetBuildable(false);
+            return false;
+        }
+
+        Cell rightCell = Grid.singleton.cellArray[currentCell.y].cells[currentCell.x + 1];
+        Cell topCell = Grid.singleton.cellArray[currentCell.y + 1].cells[currentCell.x];
+        Cell diagCell = Grid.singleton.cellArray[currentCell.y + 1].cells[currentCell.x + 1];
+
+        if(GameManager.currentStructure.size == 3)
+        {
+            currentPlacementCells.Add(Grid.singleton.cellArray[currentCell.y].cells[currentCell.x + 2]);
+            currentPlacementCells.Add(Grid.singleton.cellArray[currentCell.y + 1].cells[currentCell.x + 2]);
+
+            currentPlacementCells.Add(Grid.singleton.cellArray[currentCell.y + 2].cells[currentCell.x]);
+            currentPlacementCells.Add(Grid.singleton.cellArray[currentCell.y + 2].cells[currentCell.x + 1]);
+            currentPlacementCells.Add(Grid.singleton.cellArray[currentCell.y + 2].cells[currentCell.x + 2]);
+        }
+
+        currentPlacementCells.Add(rightCell);
+        currentPlacementCells.Add(topCell);
+        currentPlacementCells.Add(diagCell);
+
+        ToggleCellHighlights(true);
+
+        return true;
     }
     #endregion
 
-    #region BuildMode
-    //Called From UI Buttons
+    #region Build Mode
     public void ActivateBuildMode()
     {
         if(selectedCell != null)
         {
             RemoveSelected();
         }
+
+        for (int i = 0; i < currentStructures.Count; i++)
+        {
+            if (currentStructures[i].structureProperty.powerStructure)
+            {
+                currentStructures[i].ShowRange();
+            }
+        }
+
+        currentSelectionMode = SelectionMode.Build;
     }
 
     void CheckInput()
     {
-        if (Input.GetMouseButtonDown(0) && currentCell != null && currentCell.placeableArea &! currentCell.hasStructure)
+        if (Input.GetMouseButtonDown(1))
         {
-            currentCell.SetStructure(0);
-            currentCell.ToggleHighlight(false);
-            currentCell = null;
+            ActivateSelectMode();
+
+        }
+        if (Input.GetMouseButtonUp(0) && currentCell != null && CanBuildStructure() && !EventSystem.current.IsPointerOverGameObject())
+        {
+            BuildCurrentCell();
         }
     }
+
+    bool CanBuildStructure()
+    {
+        for (int i = 0; i < currentPlacementCells.Count; i++)
+        {
+            if (!currentPlacementCells[i].buildable)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void BuildCurrentCell()
+    {
+        if (GameManager.currentStructure.size > 1)
+        {
+            currentPlacementCells[0].childrenCells = new Cell[GameManager.currentStructure.size == 2 ? 4 : 9];
+            for (int i = 0; i < currentPlacementCells.Count; i++)
+            {
+                currentPlacementCells[i].buildable = false;
+                currentPlacementCells[i].SetBuildable(false);
+                currentPlacementCells[0].childrenCells[i] = currentPlacementCells[i];
+
+                if (i == 0)
+                {
+                    currentPlacementCells[i].isParent = true;
+                }
+                else
+                {
+                    currentPlacementCells[i].isChild = true;
+                    currentPlacementCells[i].parentCell = currentCell;
+                }
+            }
+        }
+        currentCell.SetStructure(GameManager.singleton.currentStructureID);
+        currentStructures.Add(currentCell);
+        GameManager.singleton.StructurePlaced();
+        for (int i = 0; i < currentStructures.Count; i++)
+        {
+            if (currentStructures[i].structureProperty.powerStructure)
+            {
+                currentStructures[i].ShowRange();
+            }
+        }
+        //currentCell.buildable = false;
+        //currentCell.SetBuildable(false);
+        //ToggleCellHighlights(false);
+        //currentPlacementCells.Clear();
+    }
+
     #endregion
 
-    #region SelectionMode
-    //Called From UI Buttons
+    #region Selection Mode
     public void ActivateSelectMode()
     {
+        GameManager.singleton.placeholder.RemovePlaceholder();
+        if (currentCell != null)
+        {
+            currentCell.DisableHighlight();
+            currentCell = null;
+        }
 
+        for (int i = 0; i < currentStructures.Count; i++)
+        {
+            if (currentStructures[i].structureProperty.powerStructure)
+            {
+                currentStructures[i].HideRange();
+            }
+        }
+
+        currentSelectionMode = SelectionMode.Select;
     }
 
     void CheckSelection()
     {
-        if (Input.GetMouseButtonDown(0) && currentCell != null && currentCell.hasStructure)
+        if (Input.GetMouseButtonDown(0))
         {
-            selectedCell = currentCell;
-            selectedCell.Select();
+
+            if(selectedCell != null)
+            {
+                RemoveSelected();
+            }
+
+            if (currentCell != null && (currentCell.hasStructure || currentCell.isChild))
+            {
+                if (currentCell.isChild)
+                {
+                    selectedCell = currentCell.parentCell;
+                }
+                else
+                {
+                    selectedCell = currentCell;
+                }
+                selectedCell.Select();
+            }
         }
     }
 
@@ -142,7 +303,20 @@ public class GridInteraction : MonoBehaviour
     {
         selectedCell.Deselect();
         selectedCell = null;
-        selectionTransform.position = Vector3.down * 100;
+        selectionTransform.position = Vector3.down * 1000;
+    }
+    #endregion
+
+    #region Public Helpers
+    public Vector3 GetCurrentPlacementPosition()
+    {
+        Vector3 returnVector = Vector3.zero;
+        for (int i = 0; i < currentPlacementCells.Count; i++)
+        {
+            returnVector += currentPlacementCells[i].transform.position;
+        }
+
+        return returnVector == Vector3.zero ? returnVector : returnVector / currentPlacementCells.Count;
     }
     #endregion
 }
