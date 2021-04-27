@@ -4,9 +4,11 @@ using UnityEngine;
 
 public class CameraController : MonoBehaviour
 {
+    public GameObject startGameMenu;
+    public GameObject gameplayMenu;
+    public Vector3[] zoomDestinations;
     public Vector2 boundsX;
     public Vector2 boundsY;
-
     public Vector2 minMaxZoom;
     public float dragSpeed = 2;
     public Rigidbody2D myBody;
@@ -20,15 +22,59 @@ public class CameraController : MonoBehaviour
     Vector3 prev;
     Vector3 vel;
 
+    Vector3 destination;
+
+    private void Start()
+    {
+        transform.position = new Vector3(20, 10, -10);
+        Camera.main.orthographicSize = 20;
+        gameplayMenu.SetActive(false);
+        startGameMenu.SetActive(true);
+    }
+
+    public void PlayIntialGameStart()
+    {
+        MoveToDestination(0);
+        gameplayMenu.SetActive(true);
+        startGameMenu.SetActive(false);
+    }
+
+    public void MoveToOverview()
+    {
+        destination = new Vector3(20, 10, -10);
+        zoom = 20;
+        zooming = true;
+        vel = Vector3.zero;
+        dragging = false;
+    }
+
+    public void MoveToDestination(int destinationID)
+    {
+        destination = zoomDestinations[destinationID];
+        zoom = 10;
+        zooming = true;
+        dragging = false;
+    }
+
     void Update()
     {
-        if (Input.GetAxis("Mouse ScrollWheel") > 0 && zoom > minMaxZoom.x)
+        if(destination != Vector3.zero)
+        {
+            transform.position = Vector3.Lerp(transform.position, destination, Time.deltaTime * 2);
+
+            if(Vector3.Distance(transform.position, destination) < .1f)
+            {
+                destination = Vector3.zero;
+            }
+        }
+
+        if (Input.GetAxis("Mouse ScrollWheel") > 0 && zoom > minMaxZoom.x && destination == Vector3.zero)
         {
             zoom -= 1;
             zooming = true;
         }
 
-        if (Input.GetAxis("Mouse ScrollWheel") < 0 && zoom < minMaxZoom.y)
+        if (Input.GetAxis("Mouse ScrollWheel") < 0 && zoom < minMaxZoom.y && destination == Vector3.zero)
         {
             zoom += 1;
             zooming = true;
@@ -72,6 +118,8 @@ public class CameraController : MonoBehaviour
 
     void LateUpdate()
     {
+        if (destination != Vector3.zero) return;
+
         if (Input.GetMouseButtonDown(0) && GridInteraction.singleton.currentSelectionMode == GridInteraction.SelectionMode.Select)
         {
             dragOrigin = Input.mousePosition;

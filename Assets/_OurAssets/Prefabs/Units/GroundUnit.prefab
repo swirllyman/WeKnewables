@@ -103,7 +103,7 @@ MonoBehaviour:
   minDistanceToNextNode: 0.05
   decayRate: 0.1
   heartImage: {fileID: 408785151205316804}
-  filledHeartObject: {fileID: 1717403917130500927}
+  fullySatisfiedHeartImage: {fileID: 6007914086926930054}
   smileFace: {fileID: 3719567848194295658}
   myCollider: {fileID: 5888647152841660541}
 --- !u!58 &5888647152841660541
@@ -213,7 +213,7 @@ MonoBehaviour:
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 1
-  m_FillAmount: 1
+  m_FillAmount: 0.1
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0

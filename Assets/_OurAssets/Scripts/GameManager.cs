@@ -7,31 +7,49 @@ public class GameManager : MonoBehaviour
 {
     public static GameManager singleton;
     public static StructurePropertyScriptableObject currentStructure;
+    public static GenerationScriptableObject currentGeneration;
 
+    public CameraController cameraController;
     public StructurePropertyScriptableObject[] structureProperties;
+    public GenerationScriptableObject[] generationProperties;
     public MainMenuUI mainMenuUI;
-    public Tooltip myTooltip;
+    public FactualTooltip factualTooltip;
+    public MouseTooltip mouseTooltip;
     public StructureSelectedUI selectedStructure;
+    public GameNotificationUI gameNotification;
+    public WaveRecapUI waveRecap;
+
     public Placeholder placeholder;
     public PathManager pathManager;
+    public Economy economy;
 
     internal int currentStructureID;
 
     int nextPathID = 0;
+    int currentGenerationID = 0;
 
     Coroutine pathRoutine;
+    Coroutine currentNotificationRoutine;
 
     private void Awake()
     {
         singleton = this;
-        myTooltip.uiObject.SetActive(false);
+        factualTooltip.uiObject.SetActive(false);
         selectedStructure.uiObject.SetActive(false);
+        HideMouseTooltip();
+        economy.currentMoneyText.text = "$ " +economy.currentMoney;
 
+        currentGeneration = generationProperties[0];
         ShowNextPath();
     }
 
     private void Update()
     {
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            DisplayMouseTooltip();
+        }
+
         if (placeholder.show)
         {
             if(GridInteraction.singleton.currentCell == null)
@@ -43,6 +61,23 @@ public class GameManager : MonoBehaviour
                 placeholder.UpdatePlaceholderPosition(GridInteraction.singleton.GetCurrentPlacementPosition(), currentStructure.powerStructure);
             }
         }
+    }
+
+    internal void PlayNotification(string notification, float holdTime = 2.0f)
+    {
+        gameNotification.notificationText.text = notification;
+        gameNotification.notificationText.transform.localScale = Vector3.zero;
+        LeanTween.scale(gameNotification.notificationText.rectTransform, Vector3.one, .25f).setEaseInExpo();
+
+        if (currentNotificationRoutine != null) StopCoroutine(currentNotificationRoutine);
+        currentNotificationRoutine = StartCoroutine(ResetNotification(holdTime));
+    }
+
+    IEnumerator ResetNotification(float holdTime)
+    {
+        yield return new WaitForSeconds(holdTime);
+        gameNotification.notificationText.transform.localScale = Vector3.one;
+        LeanTween.scale(gameNotification.notificationText.rectTransform, Vector3.zero, .25f).setEaseInExpo();
     }
 
     #region UI Buttons
@@ -73,8 +108,86 @@ public class GameManager : MonoBehaviour
     #endregion
 
     #region Path
+    internal void WaveFinished()
+    {
+        StartCoroutine(PostRoundDisplay());
+    }
+
+    IEnumerator PostRoundDisplay()
+    {
+        int path = nextPathID;
+        PlayNotification("Wave "+ nextPathID+" Complete!", 1.5f);
+        yield return new WaitForSeconds(.5f);
+        cameraController.MoveToOverview();
+
+        yield return new WaitForSeconds(1.0f);
+        PlayNotification("Wave Bonus: "+currentGeneration.waveEndBonus, 1.5f);
+        AddMoney(currentGeneration.waveEndBonus);
+        waveRecap.uiObject.SetActive(true);
+        waveRecap.playersHappyRecap.text = "";
+        waveRecap.playersReallyHappyRecap.text = "";
+        float lerpTime;
+
+        float satisfied, fullySatisfied;
+        int totalSpawnCount = pathManager.currentPath.totalSpawnCount;
+
+        lerpTime = Mathf.Lerp(.15f, 2.0f, pathManager.currentPath.satisfiedCount / totalSpawnCount);
+        for (float i = 0.0f; i <= lerpTime; i += Time.deltaTime)
+        {
+            float perc = Mathf.Clamp01(i / lerpTime);
+            satisfied = Mathf.Lerp(0, pathManager.currentPath.satisfiedCount, perc);
+
+            waveRecap.playersHappyRecap.text = "<u>Happy Players</u>\n" + (int)satisfied + " / " + totalSpawnCount + "\t<color=yellow>+" + (int)(satisfied * currentGeneration.unitMoney);
+            yield return null;
+        }
+
+        waveRecap.playersHappyRecap.text = "<u>Happy Players</u>\n" + pathManager.currentPath.satisfiedCount + " / " + pathManager.currentPath.totalSpawnCount +
+           "\t<color=yellow>+" + pathManager.currentPath.satisfiedCount * currentGeneration.unitMoney;
+        AddMoney(currentGeneration.unitMoney * pathManager.currentPath.satisfiedCount);
+
+        lerpTime = Mathf.Lerp(.15f, 2.0f, pathManager.currentPath.fullySatisfiedCount / totalSpawnCount);
+        for (float i = 0.0f; i <= lerpTime; i += Time.deltaTime)
+        {
+            float perc = Mathf.Clamp01(i / lerpTime);
+            fullySatisfied = Mathf.Lerp(0, pathManager.currentPath.fullySatisfiedCount, perc);
+            waveRecap.playersReallyHappyRecap.text = "<u>Very Happy Players</u>\n" + (int)fullySatisfied + " / " + totalSpawnCount + "\t<color=yellow>+" + (int)(fullySatisfied * currentGeneration.unitMoney);
+            yield return null;
+        }
+
+        waveRecap.playersReallyHappyRecap.text = "<u>Very Happy Players</u>\n" + pathManager.currentPath.fullySatisfiedCount + " / " + pathManager.currentPath.totalSpawnCount +
+            "\t<color=yellow>+" + pathManager.currentPath.fullySatisfiedCount * currentGeneration.unitMoney;
+
+        AddMoney(currentGeneration.unitMoney * pathManager.currentPath.fullySatisfiedCount);
+        for (int i = 3; i > 0; i--)
+        {
+            PlayNotification("Next Wave In: " + i, 1.5f);
+            waveRecap.nextWaveText.text = "Next Wave Starting In: " + i;
+            yield return new WaitForSeconds(1.0f);
+        }
+
+        waveRecap.nextWaveText.text = "";
+        waveRecap.uiObject.SetActive(false);
+
+        yield return new WaitForSeconds(.25f);
+        
+        if(nextPathID == 0)
+        {
+            PlayNotification("Generation "+ (++currentGenerationID) +" Finished!");
+            yield return new WaitForSeconds(1.5f);
+        }
+
+        ShowNextPath();
+
+        PlayNotification("Wave " + nextPathID + " Starting");
+        yield return new WaitForSeconds(.5f);
+        cameraController.MoveToDestination(path);
+        yield return new WaitForSeconds(.5f);
+        PlayNotification("Build Phase!");
+    }
+
     internal void ShowNextPath()
     {
+        currentGeneration = generationProperties[currentGenerationID % generationProperties.Length];
         pathManager.SetupNextPath(nextPathID);
 
         if (pathRoutine != null) StopCoroutine(pathRoutine);
@@ -112,32 +225,105 @@ public class GameManager : MonoBehaviour
     {
         selectedStructure.uiObject.SetActive(true);
         selectedStructure.towerName.text = structureProperty.name + " " + (structureProperty.currentLevel + 1);
-        selectedStructure.attackSpeed.text = "Attack Speed: " + structureProperty.GetAttackSpeed().ToString("F0");
-        selectedStructure.range.text = "Range: " + structureProperty.GetRange().ToString("F0");
+        selectedStructure.attackSpeed.text = "Attack Speed: " + structureProperty.GetAttackSpeed().ToString("F1");
+        selectedStructure.range.text = "Range: " + (structureProperty.powerStructure ? structureProperty.GetRange() : structureProperty.GetRange() / 25).ToString("F0");
         selectedStructure.satisfaction.text = "Satisfaction: " + structureProperty.GetSatisfaction().ToString("F0");
         selectedStructure.pollution.text = "Pollution: " + structureProperty.GetPollution().ToString("F0");
 
-        DisplayTooltip(structureProperty.name +" "+ (structureProperty.currentLevel + 1), structureProperty.tooltip[Random.Range(0, structureProperty.tooltip.Length)]);
+        DisplayFactualTooltip(structureProperty.name +" "+ (structureProperty.currentLevel + 1), structureProperty.tooltip[Random.Range(0, structureProperty.tooltip.Length)]);
     }
 
     internal void DeselectStructure()
     {
         selectedStructure.uiObject.SetActive(false);
-        HideTooltip();
+        HideFactualTooltip();
     }
     #endregion
 
     #region Tooltips
-    internal void DisplayTooltip(string name, string newTooltip)
+    internal void DisplayFactualTooltip(string name, string newTooltip)
     {
-        myTooltip.uiObject.SetActive(true);
-        myTooltip.header.text = name;
-        myTooltip.info.text = newTooltip;
+        factualTooltip.uiObject.SetActive(true);
+        factualTooltip.header.text = name;
+        factualTooltip.info.text = newTooltip;
     }
 
-    internal void HideTooltip()
+    internal void HideFactualTooltip()
     {
-        myTooltip.uiObject.SetActive(false);
+        factualTooltip.uiObject.SetActive(false);
+    }
+
+    internal void DisplayMouseTooltip()
+    {
+        mouseTooltip.uiObject.SetActive(true);
+        mouseTooltip.tooltipTransform.localPosition = Input.mousePosition - mouseTooltip.myCanvas.transform.localPosition;
+    }
+
+    //Called From UI Events
+    public void DisplayMouseTooltipForStructure(int structureID)
+    {
+        mouseTooltip.uiObject.SetActive(true);
+
+        StructurePropertyScriptableObject hoverStructure = structureProperties[structureID];
+
+        string requirementText = "";
+        if(hoverStructure.buildRestrictions == StructurePropertyScriptableObject.LocationRestrictions.Water)
+        {
+            requirementText = "<color=white>Requires: <color=#00E0FF>Water";
+        }
+        else if(hoverStructure.buildRestrictions == StructurePropertyScriptableObject.LocationRestrictions.Land)
+        {
+            requirementText = "<color=white>Requires: <color=#8DCA42>Land";
+        }
+
+        string tooltip = "<u>" + hoverStructure.structureName + "</u>" +
+            "\n\nSize: " + hoverStructure.size +
+            "\nHappiness Per Shot: " + hoverStructure.GetSatisfaction().ToString("F0") +
+            "\nShots Per Second: " + hoverStructure.GetAttackSpeed().ToString("F1") +
+            "\nRange: " + "Range: " + (hoverStructure.powerStructure ? hoverStructure.GetRange() : hoverStructure.GetRange() / 25).ToString("F0") +
+            "\nPollution: " + hoverStructure.GetPollution().ToString("F0") +
+            "\n\n" + (HasEnoughMoney(hoverStructure.cost[0]) ? "<color=green>" : "<color=red>") + "Cost: " + hoverStructure.cost[0] +
+            " <color=white>-- <color=yellow>(Current: " + economy.currentMoney + ")\n"+ requirementText;
+
+        mouseTooltip.tooltipText.text = tooltip;
+        mouseTooltip.tooltipTransform.localPosition = Input.mousePosition - mouseTooltip.myCanvas.transform.localPosition;
+    }
+
+    //Called From UI Events
+    public void HideMouseTooltip()
+    {
+        mouseTooltip.uiObject.SetActive(false);
+        mouseTooltip.tooltipTransform.localPosition = Input.mousePosition - mouseTooltip.myCanvas.transform.localPosition;
+    }
+    #endregion
+
+    #region Economy
+    public static bool HasEnoughMoney(int amount)
+    {
+        return amount <= singleton.economy.currentMoney;
+    }
+
+    internal void RemoveMoney(int moneyToRemove)
+    {
+        economy.currentMoney -= moneyToRemove;
+        economy.currentMoneyText.text = "$ " + economy.currentMoney;
+    }
+
+    internal void AddMoney(int moneyToAdd)
+    {
+        economy.currentMoney += moneyToAdd;
+        economy.currentMoneyText.text = "$ " + economy.currentMoney;
+    }
+
+    internal void UnitFullySatisfied()
+    {
+        pathManager.UpdateFullySatisfiedCount(pathManager.currentPath.fullySatisfiedCount, currentGeneration.unitsPerWave);
+    }
+
+    internal void UnitSatisfied()
+    {
+        pathManager.UpdateSatisfiedCount(pathManager.currentPath.satisfiedCount, currentGeneration.unitsPerWave);
+        AddMoney(currentGeneration.unitMoney);
     }
     #endregion
 }
@@ -161,11 +347,43 @@ public struct StructureSelectedUI
 }
 
 [System.Serializable]
-public struct Tooltip
+public struct FactualTooltip
 {
     public GameObject uiObject;
     public TMP_Text header;
     public TMP_Text info;
+}
+
+[System.Serializable]
+public struct MouseTooltip 
+{
+    public GameObject uiObject;
+    public Canvas myCanvas; 
+    public RectTransform tooltipTransform;
+    public TMP_Text tooltipText;
+}
+
+[System.Serializable]
+public struct GameNotificationUI
+{
+    public GameObject uiObject;
+    public TMP_Text notificationText;
+}
+
+[System.Serializable]
+public struct WaveRecapUI
+{
+    public GameObject uiObject;
+    public TMP_Text playersHappyRecap;
+    public TMP_Text playersReallyHappyRecap;
+    public TMP_Text nextWaveText;
+}
+
+[System.Serializable]
+public class Economy
+{
+    public int currentMoney = 250;
+    public TMP_Text currentMoneyText;
 }
 
 [System.Serializable]
@@ -178,6 +396,7 @@ public class PathManager
     public GameObject sendWaveButton;
     public GameObject currentWaveUI;
     public TMP_Text waveCountText;
+    public TMP_Text fullySatisfiedText;
 
     internal GamePath currentPath;
 
@@ -195,11 +414,18 @@ public class PathManager
 
         sendWaveButton.SetActive(true);
         currentWaveUI.SetActive(false);
+
+        //Show Info on next Wave Here Somewhere
     }
 
-    internal void UpdateCount(int remainingCount)
+    internal void UpdateSatisfiedCount(int satisfied, int total)
     {
-        waveCountText.text = "Current Not Happy\n#: " + remainingCount;
+        waveCountText.text = "Happy\n#: " + satisfied + " / "+ total;
+    }
+
+    internal void UpdateFullySatisfiedCount(int satisfied, int total)
+    {
+        fullySatisfiedText.text = "Super Happy\n#: " + satisfied + " / " + total;
     }
 
     internal void StartPath()
@@ -209,7 +435,8 @@ public class PathManager
         endAreaText.SetActive(false);
         sendWaveButton.SetActive(false);
         currentWaveUI.SetActive(true);
-        waveCountText.text = "Current Not Happy\n#:  " + currentPath.totalSpawnCount;
+        waveCountText.text = "Happy\n#:  " + 0 / currentPath.totalSpawnCount;
+        fullySatisfiedText.text = "Super Happy\n#: " + 0 / currentPath.totalSpawnCount;
         currentPath.SendWave();
     }
 }
@@ -228,6 +455,7 @@ public class Placeholder
         uiObject.SetActive(true);
         show = true;
         placementSprite.sprite = structureProperty.currentSprites[structureProperty.currentLevel];
+        placementSprite.transform.localScale = Vector3.one * .75f * structureProperty.size;
 
         if (structureProperty.powerStructure)
         {

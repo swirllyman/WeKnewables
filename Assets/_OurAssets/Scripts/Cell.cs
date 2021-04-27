@@ -15,10 +15,12 @@ public class Cell : MonoBehaviour, ISelectable
     public int x, y;
     public bool placeableArea = true;
     public bool waterArea = false;
+
     internal bool isPowered;
     internal bool buildable = true;
     internal bool hasStructure;
     internal bool isChild = false;
+    internal GameObject currentStructureObject;
     internal Cell parentCell;
 
     internal bool isParent = false;
@@ -50,6 +52,42 @@ public class Cell : MonoBehaviour, ISelectable
         projectile.Fire(target, structureProperty, transform.position);
     }
 
+    public void DetermineBuildable()
+    {
+        SetBuildable(CheckStructure() && CheckRestrictions() && CheckPower() && placeableArea && GameManager.HasEnoughMoney(GameManager.currentStructure.cost[0]));
+    }
+
+    bool CheckStructure()
+    {
+        return !hasStructure && !isChild;
+    }
+
+    bool CheckRestrictions()
+    {
+
+        if (GameManager.currentStructure.buildRestrictions == StructurePropertyScriptableObject.LocationRestrictions.None)
+            return true;
+        else
+        {
+            if (GameManager.currentStructure.buildRestrictions == StructurePropertyScriptableObject.LocationRestrictions.Water)
+            {
+                return waterArea;
+            }
+            else
+            {
+                return !waterArea;
+            }
+        }
+    }
+
+    bool CheckPower()
+    {
+        if (GameManager.currentStructure.powerStructure)
+            return true;
+        else
+            return isPowered;
+    }
+
     public void SetBuildable(bool isBuildable)
     {
         buildable = isBuildable;
@@ -69,7 +107,7 @@ public class Cell : MonoBehaviour, ISelectable
         {
             List<Collider2D> nearbyCells = new List<Collider2D>();
             ContactFilter2D contactFilter = new ContactFilter2D();
-            if(Physics2D.OverlapBox(GetMidPoint(), Vector2.one * ((structureProperty.GetRange() * 2) + ((structureProperty.size - 1) * .5f)), 0, contactFilter, nearbyCells) > 0)
+            if(Physics2D.OverlapBox(GetMidPoint(), Vector2.one * ((structureProperty.GetRange() * 2) + ((structureProperty.size - 1) * .5f) - 1), 0, contactFilter, nearbyCells) > 0)
             {
                 for (int i = 0; i < nearbyCells.Count; i++)
                 {
@@ -94,30 +132,47 @@ public class Cell : MonoBehaviour, ISelectable
             HideRange();
         }
 
-        GameObject newStructure = Instantiate(structureProperty.structureObjects[0], transform);
-        newStructure.transform.position = GetMidPoint();
+        currentStructureObject = Instantiate(structureProperty.structureObjects[0], transform);
+        currentStructureObject.transform.position = GetMidPoint();
+        currentStructureObject.transform.localScale *= structureProperty.size;
+        LeanTween.scale(currentStructureObject, currentStructureObject.transform.localScale * 1.25f, 1.0f).setEasePunch();
+        GameManager.singleton.RemoveMoney(structureProperty.cost[0]);
     }
 
     private void SubTrigger_onTrigger(Collider2D collider, bool entered)
     {
-        if(entered && target == null)
+
+        if (collider.CompareTag("GroundUnit"))
         {
-            if (collider.CompareTag("GroundUnit"))
+            if (entered)
             {
                 GroundUnit newUnit = collider.GetComponent<GroundUnit>();
-
-                if (!newUnit.satisfied)
+                if (target == null)
                 {
-                    target = collider.GetComponent<GroundUnit>();
-                    target.onSatisfied += TargetSatisfied;
-                    target.onFinishedPath += TargetFinishedPath;
+                    if (!newUnit.satisfied || !newUnit.fullySatisfied)
+                    {
+                        AssignNewTarget(newUnit);
+                    }
+                }
+                else if (target.satisfied & !newUnit.satisfied)
+                {
+                    RemoveCurrentTarget(false);
+                    AssignNewTarget(newUnit);
                 }
             }
+            else if (target != null && target.myCollider == collider)
+            {
+                RemoveCurrentTarget();
+            }
         }
-        else if(!entered && target != null && target.myCollider == collider)
-        {
-            RemoveCurrentTarget();
-        }
+    }
+
+    void AssignNewTarget(GroundUnit newUnit)
+    {
+        target = newUnit;
+        target.onSatisfied += TargetSatisfied;
+        target.onFullySatisfied += TargetFullySatisfied;
+        target.onFinishedPath += TargetFinishedPath;
     }
 
     void TargetFinishedPath(GroundUnit thisUnit)
@@ -136,13 +191,25 @@ public class Cell : MonoBehaviour, ISelectable
         }
     }
 
-    void RemoveCurrentTarget()
+    private void TargetFullySatisfied(GroundUnit thisUnit)
     {
-        target.onSatisfied -= TargetSatisfied;
+        if(thisUnit == target)
+        {
+            RemoveCurrentTarget();
+        }
+    }
+
+    void RemoveCurrentTarget(bool resetCollider = true)
+    {
+        target.onFullySatisfied -= TargetFullySatisfied;
         target.onFinishedPath -= TargetFinishedPath;
         target = null;
-        attackTrigger.attackCollider.enabled = false;
-        attackTrigger.attackCollider.enabled = true;
+
+        if (resetCollider)
+        {
+            attackTrigger.attackCollider.enabled = false;
+            attackTrigger.attackCollider.enabled = true;
+        }
     }
 
     internal void ShowRange()
@@ -182,6 +249,7 @@ public class Cell : MonoBehaviour, ISelectable
         }
         else
         {
+            LeanTween.scale(currentStructureObject, currentStructureObject.transform.localScale * 1.25f, 1.0f).setEasePunch();
             GameManager.singleton.SelectStructure(structureProperty);
             ShowRange();
         }

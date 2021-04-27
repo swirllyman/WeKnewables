@@ -3,15 +3,20 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "StructureProperty", menuName = "ScriptableObjects/StructureProperty", order = 1)]
 public class StructurePropertyScriptableObject : ScriptableObject
 {
+    public enum LocationRestrictions { None, Land, Water}
+
     public string structureName;
     public int currentLevel = 0;
     public int size = 1;
     public bool powerStructure = false;
-    public bool waterStructure = false;
+    public LocationRestrictions buildRestrictions;
+
+    //public bool requireLand = false;
+    //public bool requireWater = false;
+    public TowerProperties towerProperties;
+    public int[] cost;
     public Sprite[] currentSprites;
     public GameObject[] structureObjects;
-    public float[] cost;
-    public TowerProperties towerProperties;
 
     [TextArea(3, 5)]
     public string[] tooltip;
@@ -23,7 +28,7 @@ public class StructurePropertyScriptableObject : ScriptableObject
 
     internal float GetRange()
     {
-        return towerProperties.range[currentLevel];
+        return powerStructure ? towerProperties.range[currentLevel] : towerProperties.range[currentLevel] * 25;
     }
 
     internal float GetSatisfaction()

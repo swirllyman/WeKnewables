@@ -9,23 +9,26 @@ public class GamePath : MonoBehaviour
     public float spawnRadius = .7f;
     public float waypointRadius = .5f;
 
-    [Header("Units")]
-    public GameObject unitPrefab;
-    public List<GroundUnit> currentUnits;
-    public float spawnRate = 1.0f;
-    public int totalSpawnCount = 30;
+    internal int totalSpawnCount = 30;
+    internal int satisfiedCount = 0;
+    internal int fullySatisfiedCount = 0;
 
+    List<GroundUnit> currentUnits;
+    
     bool roundActive = false;
-
+    float spawnRate = 1.0f;
     float spawnTimer = 0.0f;
     int currentSpawnCount = 0;
-    int satisfiedCount = 0;
 
     [ContextMenu("Send Wave")]
     public void SendWave()
     {
         if (!roundActive)
         {
+            currentUnits = new List<GroundUnit>();
+            totalSpawnCount = GameManager.currentGeneration.unitsPerWave;
+            spawnRate = GameManager.currentGeneration.unitSpawnSpeed;
+            fullySatisfiedCount = 0;
             satisfiedCount = 0;
             spawnTimer = 0.0f;
             currentSpawnCount = 0;
@@ -50,48 +53,65 @@ public class GamePath : MonoBehaviour
         spawnTimer = spawnRate;
         currentSpawnCount++;
 
-        GameObject unitObject = Instantiate(unitPrefab, transform.position + ((Vector3)Random.insideUnitCircle * spawnRadius), Quaternion.identity);
+        GameObject unitObject = Instantiate(GameManager.currentGeneration.unitObject, transform.position + ((Vector3)Random.insideUnitCircle * spawnRadius), Quaternion.identity);
         GroundUnit newUnit = unitObject.GetComponent<GroundUnit>();
         newUnit.SetPath(this);
         newUnit.onFinishedPath += OnUnitFinishedPath;
         newUnit.onSatisfied += OnUnitSatisfied;
+        newUnit.onFullySatisfied += OnUnitFullySatisfied;
         currentUnits.Add(newUnit);
-        //GameManager.singleton.pathManager.UpdateCount(currentUnits.Count);
     }
 
-    private void OnUnitSatisfied(GroundUnit unit)
+    private void OnUnitFullySatisfied(GroundUnit unit)
     {
-        unit.onSatisfied -= OnUnitSatisfied;
+        unit.onFullySatisfied -= OnUnitFullySatisfied;
+        fullySatisfiedCount++;
+        GameManager.singleton.UnitFullySatisfied();
+        GameManager.singleton.pathManager.UpdateFullySatisfiedCount(fullySatisfiedCount, totalSpawnCount);
         if (currentUnits.Contains(unit))
         {
-            satisfiedCount++;
             currentUnits.Remove(unit);
-            GameManager.singleton.pathManager.UpdateCount(totalSpawnCount - satisfiedCount);
             if (currentSpawnCount == totalSpawnCount && currentUnits.Count <= 0)
             {
                 Debug.Log("Wave Finished");
                 roundActive = false;
-                StartCoroutine(StartNextWave());
+                EndWave();
             }
         }
 
         //TODO: Give Points Here
     }
 
+    private void OnUnitSatisfied(GroundUnit unit)
+    {
+        unit.onSatisfied -= OnUnitSatisfied;
+        satisfiedCount++;
+
+        GameManager.singleton.UnitSatisfied();
+        
+        
+        //TODO: Give Points Here
+    }
+
     private void OnUnitFinishedPath(GroundUnit finishedUnit)
     {
         finishedUnit.onFinishedPath -= OnUnitFinishedPath;
+        finishedUnit.onFullySatisfied -= OnUnitFullySatisfied;
+        finishedUnit.onSatisfied -= OnUnitSatisfied;
         if (currentUnits.Contains(finishedUnit))
         {
             currentUnits.Remove(finishedUnit);
-            GameManager.singleton.pathManager.UpdateCount(currentUnits.Count);
-
             if (currentUnits.Count <= 0 && roundActive)
             {
                 Debug.Log("Wave Finished");
                 roundActive = false;
-                StartCoroutine(StartNextWave());
+                EndWave();
             }
+        }
+
+        if (finishedUnit.fullySatisfied)
+        {
+            //Give Bonus Point Here
         }
 
         if (!finishedUnit.satisfied)
@@ -102,10 +122,9 @@ public class GamePath : MonoBehaviour
         Destroy(finishedUnit.gameObject);
     }
 
-    IEnumerator StartNextWave()
+    void EndWave()
     {
-        yield return new WaitForSeconds(5.0f);
-        GameManager.singleton.ShowNextPath();
+        GameManager.singleton.WaveFinished();
     }
 
     private void OnDrawGizmosSelected()

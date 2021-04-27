@@ -12,6 +12,7 @@ public class GridInteraction : MonoBehaviour
     public SelectionMode currentSelectionMode;
 
     public Transform selectionTransform;
+    public Transform hoverSelectionTransform;
 
     internal Cell currentCell;
     internal List<Cell> currentPlacementCells = new List<Cell>();
@@ -103,6 +104,21 @@ public class GridInteraction : MonoBehaviour
                 ToggleCellHighlights(true);
             }
         }
+        else if(currentCell.hasStructure || currentCell.isChild)
+        {
+            if (currentCell.isChild)
+            {
+                currentCell = currentCell.parentCell;
+            }
+
+
+            hoverSelectionTransform.position = currentCell.GetMidPoint();
+            hoverSelectionTransform.localScale = Vector3.one * .75f * (currentCell.structureProperty.size + ((currentCell.structureProperty.size - 1) * .25f));
+        }
+        else
+        {
+            hoverSelectionTransform.position = Vector3.down * 1000;
+        }
     }
 
     void ToggleCellHighlights(bool toggle)
@@ -115,16 +131,7 @@ public class GridInteraction : MonoBehaviour
             }
             else
             {
-                if (GameManager.currentStructure.waterStructure)
-                    currentPlacementCells[i].SetBuildable(currentPlacementCells[i].waterArea & !currentPlacementCells[i].hasStructure & !currentPlacementCells[i].isChild);
-                else if(GameManager.currentStructure.powerStructure)
-                    currentPlacementCells[i].SetBuildable(currentPlacementCells[i].placeableArea &! currentPlacementCells[i].hasStructure &! currentPlacementCells[i].isChild &!currentPlacementCells[i].waterArea);
-                else
-                    currentPlacementCells[i].SetBuildable(currentPlacementCells[i].placeableArea & !currentPlacementCells[i].hasStructure & !currentPlacementCells[i].isChild && currentPlacementCells[i].isPowered & !currentPlacementCells[i].waterArea);
-                //if (currentPlacementCells[i].placeableArea &! currentPlacementCells[i].hasStructure)
-                //    currentPlacementCells[i].ToggleHighlight(true);
-                //else
-                //    currentPlacementCells[i].SetBuildable(false);
+                currentPlacementCells[i].DetermineBuildable();
             }
         }
     }
@@ -176,6 +183,7 @@ public class GridInteraction : MonoBehaviour
         {
             RemoveSelected();
         }
+        selectionTransform.position = Vector3.down * 1000;
 
         for (int i = 0; i < currentStructures.Count; i++)
         {
@@ -245,10 +253,6 @@ public class GridInteraction : MonoBehaviour
                 currentStructures[i].ShowRange();
             }
         }
-        //currentCell.buildable = false;
-        //currentCell.SetBuildable(false);
-        //ToggleCellHighlights(false);
-        //currentPlacementCells.Clear();
     }
 
     #endregion
