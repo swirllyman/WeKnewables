@@ -20,6 +20,7 @@ public class GridInteraction : MonoBehaviour
     RaycastHit2D hit;
 
     List<Cell> currentStructures = new List<Cell>();
+    List<Cell> currentPowerStructures = new List<Cell>();
 
     private void Awake()
     {
@@ -228,7 +229,6 @@ public class GridInteraction : MonoBehaviour
             currentPlacementCells[0].childrenCells = new Cell[GameManager.currentStructure.size == 2 ? 4 : 9];
             for (int i = 0; i < currentPlacementCells.Count; i++)
             {
-                currentPlacementCells[i].buildable = false;
                 currentPlacementCells[i].SetBuildable(false);
                 currentPlacementCells[0].childrenCells[i] = currentPlacementCells[i];
 
@@ -243,9 +243,18 @@ public class GridInteraction : MonoBehaviour
                 }
             }
         }
+
+        if (GameManager.currentStructure.powerStructure)
+        {
+            currentPowerStructures.Add(currentCell);
+        }
+
+        GameManager.singleton.StructurePlaced();
+
         currentCell.SetStructure(GameManager.singleton.currentStructureID);
         currentStructures.Add(currentCell);
-        GameManager.singleton.StructurePlaced();
+
+
         for (int i = 0; i < currentStructures.Count; i++)
         {
             if (currentStructures[i].structureProperty.powerStructure)
@@ -253,6 +262,8 @@ public class GridInteraction : MonoBehaviour
                 currentStructures[i].ShowRange();
             }
         }
+
+        ActivateSelectMode();
     }
 
     #endregion
@@ -280,7 +291,7 @@ public class GridInteraction : MonoBehaviour
 
     void CheckSelection()
     {
-        if (Input.GetMouseButtonDown(0))
+        if (Input.GetMouseButtonDown(0) && !EventSystem.current.IsPointerOverGameObject())
         {
 
             if(selectedCell != null)
@@ -308,6 +319,22 @@ public class GridInteraction : MonoBehaviour
         selectedCell.Deselect();
         selectedCell = null;
         selectionTransform.position = Vector3.down * 1000;
+    }
+
+    internal void SellSelected()
+    {
+        if (selectedCell.isParent)
+        {
+            for (int i = 0; i < selectedCell.childrenCells.Length; i++)
+            {
+                currentStructures.Remove(selectedCell.childrenCells[i]);
+                currentPowerStructures.Remove(selectedCell.childrenCells[i]);
+            }
+        }
+
+        currentStructures.Remove(selectedCell);
+        currentPowerStructures.Remove(selectedCell);
+        RemoveSelected();
     }
     #endregion
 

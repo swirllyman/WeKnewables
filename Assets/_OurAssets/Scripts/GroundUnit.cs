@@ -6,8 +6,11 @@ using UnityEngine.UI;
 public class GroundUnit : MonoBehaviour
 {
     public float minDistanceToNextNode = .5f;
+    public SpriteRenderer myRend;
+    public Color slowedColor;
     public Image heartImage;
     public Image fullySatisfiedHeartImage;
+    public Image completedHeartImage;
     public GameObject smileFace;
     public Collider2D myCollider;
     internal GamePath currentPath;
@@ -16,10 +19,14 @@ public class GroundUnit : MonoBehaviour
 
     bool runningPath = false;
     int currentWaypointID = 0;
+    float mySpeed = 5.0f;
     float currentSpeed = 5.0f;
     float currentSatisfiedPercent = .1f;
     float currentFullySatisfiedPercent = .1f;
+    //float 
     Vector3 destination;
+
+    Coroutine currentSlowRoutine;
 
     public delegate void FinishedPathCallback(GroundUnit thisUnit);
     public event FinishedPathCallback onFinishedPath;
@@ -39,6 +46,7 @@ public class GroundUnit : MonoBehaviour
 
             if (currentFullySatisfiedPercent >= 1.0f)
             {
+                completedHeartImage.enabled = true;
                 onFullySatisfied?.Invoke(this);
                 fullySatisfied = true;
             }
@@ -62,9 +70,25 @@ public class GroundUnit : MonoBehaviour
         }
     }
 
+    internal void Slow(float slowPerc, float slowDuration)
+    {
+        if (currentSlowRoutine != null) StopCoroutine(currentSlowRoutine);
+        currentSlowRoutine = StartCoroutine(SlowRoutine(slowDuration));
+        currentSpeed = mySpeed * (1 - slowPerc);
+        myRend.color = slowedColor;
+    }
+
+    IEnumerator SlowRoutine(float duration)
+    {
+        yield return new WaitForSeconds(duration);
+        currentSpeed = mySpeed;
+        myRend.color = Color.white;
+    }
+
     internal void SetPath(GamePath newPath)
     {
-        currentSpeed = GameManager.currentGeneration.unitSpeed * Random.Range(.95f, 1.05f);
+        mySpeed = GameManager.currentGeneration.unitSpeed * Random.Range(.95f, 1.05f) * (1 + (GameManager.waveNum * .5f));
+        currentSpeed = mySpeed;
         currentPath = newPath;
         runningPath = true;
         SetNextWaypoint();
@@ -76,8 +100,7 @@ public class GroundUnit : MonoBehaviour
     void SetNextWaypoint()
     {
         currentWaypointID++;
-
-        if(currentWaypointID >= currentPath.waypoints.Length)
+        if (currentWaypointID >= currentPath.waypoints.Length)
         {
             runningPath = false;
             onFinishedPath?.Invoke(this);
@@ -85,6 +108,7 @@ public class GroundUnit : MonoBehaviour
         else
         {
             destination = currentPath.transform.position + currentPath.waypoints[currentWaypointID] + (Vector3)Random.insideUnitCircle * currentPath.waypointRadius;
+            myRend.flipX = transform.position.x > destination.x;
         }
     }
 
