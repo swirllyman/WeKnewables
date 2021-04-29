@@ -200,7 +200,7 @@ public class GameManager : MonoBehaviour
         ShowNextPath();
 
         PlayNotification("Wave " + nextPathID + " Starting");
-        waveNum += (waveNum + 1) % pathManager.gamePaths.Length;
+        waveNum = (waveNum + 1) % pathManager.gamePaths.Length;
         yield return new WaitForSeconds(.5f);
         cameraController.MoveToDestination(path);
         yield return new WaitForSeconds(.5f);
