@@ -76,6 +76,18 @@ public class Grid : MonoBehaviour
             }
         }
     }
+
+    [ContextMenu("Show Grid")]
+    public void ShowGrid()
+    {
+        cellArray[0].cells[0].cellHighlightRend.sharedMaterial.color = cellArray[0].cells[0].highlightColor;
+    }
+
+    [ContextMenu("Hide Grid")]
+    public void HideGrid()
+    {
+        cellArray[0].cells[0].cellHighlightRend.sharedMaterial.color = cellArray[0].cells[0].hiddenColor;
+    }
 }
 
 [System.Serializable]

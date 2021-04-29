@@ -12,8 +12,8 @@ public class GenerationScriptableObject : ScriptableObject
     public float unitHappiness = 100;
     public float unitFullHappiness = 100;
     
-    public int unitSpeed = 1;
+    public float unitSpeed = 1;
     public int unitMoney = 10;
 
-    public GameObject unitObject;
+    public GameObject[] unitObjects;
 }

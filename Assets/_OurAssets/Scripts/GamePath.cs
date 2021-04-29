@@ -53,7 +53,8 @@ public class GamePath : MonoBehaviour
         spawnTimer = spawnRate;
         currentSpawnCount++;
 
-        GameObject unitObject = Instantiate(GameManager.currentGeneration.unitObject, transform.position + ((Vector3)Random.insideUnitCircle * spawnRadius), Quaternion.identity);
+        GameObject unitObject = Instantiate(GameManager.currentGeneration.unitObjects[Random.Range(0, GameManager.currentGeneration.unitObjects.Length)], transform.position
+            + ((Vector3)Random.insideUnitCircle * spawnRadius), Quaternion.identity);
         GroundUnit newUnit = unitObject.GetComponent<GroundUnit>();
         newUnit.SetPath(this);
         newUnit.onFinishedPath += OnUnitFinishedPath;

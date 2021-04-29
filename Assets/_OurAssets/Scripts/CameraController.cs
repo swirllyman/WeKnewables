@@ -6,6 +6,7 @@ public class CameraController : MonoBehaviour
 {
     public GameObject startGameMenu;
     public GameObject gameplayMenu;
+    public GameObject cheatsMenu;
     public Vector3[] zoomDestinations;
     public Vector2 boundsX;
     public Vector2 boundsY;
@@ -26,9 +27,10 @@ public class CameraController : MonoBehaviour
 
     private void Start()
     {
-        transform.position = new Vector3(20, 10, -10);
-        Camera.main.orthographicSize = 20;
+        transform.position = new Vector3(20, 20, -10);
+        Camera.main.orthographicSize = 25;
         gameplayMenu.SetActive(false);
+        cheatsMenu.SetActive(false);
         startGameMenu.SetActive(true);
     }
 
@@ -39,10 +41,18 @@ public class CameraController : MonoBehaviour
         startGameMenu.SetActive(false);
     }
 
+    public void PlayIntialGameStartWtihCheats()
+    {
+        MoveToDestination(0);
+        gameplayMenu.SetActive(true);
+        startGameMenu.SetActive(false);
+        cheatsMenu.SetActive(true);
+    }
+
     public void MoveToOverview()
     {
-        destination = new Vector3(20, 10, -10);
-        zoom = 20;
+        destination = new Vector3(20, 20, -10);
+        zoom = 25;
         zooming = true;
         vel = Vector3.zero;
         dragging = false;
@@ -65,6 +75,7 @@ public class CameraController : MonoBehaviour
             if(Vector3.Distance(transform.position, destination) < .1f)
             {
                 destination = Vector3.zero;
+                GridInteraction.singleton.ActivateSelectMode();
             }
         }
 

@@ -2,34 +2,43 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager singleton;
     public static StructurePropertyScriptableObject currentStructure;
     public static GenerationScriptableObject currentGeneration;
+    public static int waveNum = 0;
 
     public CameraController cameraController;
     public StructurePropertyScriptableObject[] structureProperties;
     public GenerationScriptableObject[] generationProperties;
+
+    [Header("Structs")]
     public MainMenuUI mainMenuUI;
     public FactualTooltip factualTooltip;
     public MouseTooltip mouseTooltip;
     public StructureSelectedUI selectedStructure;
     public GameNotificationUI gameNotification;
     public WaveRecapUI waveRecap;
+    public Pollution pollution;
 
+    [Header("Classes")]
     public Placeholder placeholder;
     public PathManager pathManager;
     public Economy economy;
 
     internal int currentStructureID;
+    internal int nextPathID = 0;
 
-    int nextPathID = 0;
     int currentGenerationID = 0;
+    Cell currentStructureCell;
 
     Coroutine pathRoutine;
     Coroutine currentNotificationRoutine;
+    Coroutine pollutionFillRoutine;
+    Coroutine moneyAddedRoutine;
 
     private void Awake()
     {
@@ -41,6 +50,7 @@ public class GameManager : MonoBehaviour
 
         currentGeneration = generationProperties[0];
         ShowNextPath();
+        AddPollution(0);
     }
 
     private void Update()
@@ -81,6 +91,17 @@ public class GameManager : MonoBehaviour
     }
 
     #region UI Buttons
+    public void SellCurrentTower()
+    {
+        print("Getting Here?FDgsDS?");
+        if (currentStructureCell != null)
+        {
+            print("Getting Here?FDgsDS?");
+            currentStructureCell.SellStructure();
+        }
+    }
+
+    //Called Fom UI Button
     public void SendWave()
     {
         StopCoroutine(pathRoutine);
@@ -107,7 +128,7 @@ public class GameManager : MonoBehaviour
     }
     #endregion
 
-    #region Path
+    #region Waves
     internal void WaveFinished()
     {
         StartCoroutine(PostRoundDisplay());
@@ -131,7 +152,7 @@ public class GameManager : MonoBehaviour
         float satisfied, fullySatisfied;
         int totalSpawnCount = pathManager.currentPath.totalSpawnCount;
 
-        lerpTime = Mathf.Lerp(.15f, 2.0f, pathManager.currentPath.satisfiedCount / totalSpawnCount);
+        lerpTime = Mathf.Lerp(.25f, 1.0f, pathManager.currentPath.satisfiedCount / totalSpawnCount);
         for (float i = 0.0f; i <= lerpTime; i += Time.deltaTime)
         {
             float perc = Mathf.Clamp01(i / lerpTime);
@@ -145,7 +166,7 @@ public class GameManager : MonoBehaviour
            "\t<color=yellow>+" + pathManager.currentPath.satisfiedCount * currentGeneration.unitMoney;
         AddMoney(currentGeneration.unitMoney * pathManager.currentPath.satisfiedCount);
 
-        lerpTime = Mathf.Lerp(.15f, 2.0f, pathManager.currentPath.fullySatisfiedCount / totalSpawnCount);
+        lerpTime = Mathf.Lerp(.25f, 1.0f, pathManager.currentPath.fullySatisfiedCount / totalSpawnCount);
         for (float i = 0.0f; i <= lerpTime; i += Time.deltaTime)
         {
             float perc = Mathf.Clamp01(i / lerpTime);
@@ -179,6 +200,7 @@ public class GameManager : MonoBehaviour
         ShowNextPath();
 
         PlayNotification("Wave " + nextPathID + " Starting");
+        waveNum = (waveNum + 1) % pathManager.gamePaths.Length;
         yield return new WaitForSeconds(.5f);
         cameraController.MoveToDestination(path);
         yield return new WaitForSeconds(.5f);
@@ -218,25 +240,59 @@ public class GameManager : MonoBehaviour
     #region Structures
     public void StructurePlaced()
     {
-        //GridInteraction.singleton.ActivateSelectMode();
+        RemoveMoney(currentStructure.cost);
+        AddPollution(currentStructure.pollution);
     }
 
-    internal void SelectStructure(StructurePropertyScriptableObject structureProperty)
+    internal void SelectStructure(Cell structureCell)
     {
         selectedStructure.uiObject.SetActive(true);
-        selectedStructure.towerName.text = structureProperty.name + " " + (structureProperty.currentLevel + 1);
-        selectedStructure.attackSpeed.text = "Attack Speed: " + structureProperty.GetAttackSpeed().ToString("F1");
-        selectedStructure.range.text = "Range: " + (structureProperty.powerStructure ? structureProperty.GetRange() : structureProperty.GetRange() / 25).ToString("F0");
-        selectedStructure.satisfaction.text = "Satisfaction: " + structureProperty.GetSatisfaction().ToString("F0");
-        selectedStructure.pollution.text = "Pollution: " + structureProperty.GetPollution().ToString("F0");
+        StructurePropertyScriptableObject hoverStructure = structureCell.structureProperty;
+        selectedStructure.selectedButton.interactable = hoverStructure.canSell;
 
-        DisplayFactualTooltip(structureProperty.name +" "+ (structureProperty.currentLevel + 1), structureProperty.tooltip[Random.Range(0, structureProperty.tooltip.Length)]);
+        string requirementText = "";
+        if (hoverStructure.buildRestrictions == StructurePropertyScriptableObject.LocationRestrictions.Water)
+            requirementText = "<color=white>Requires: <color=#00E0FF>Water</color>";
+        else if (hoverStructure.buildRestrictions == StructurePropertyScriptableObject.LocationRestrictions.Land)
+            requirementText = "<color=white>Requires: <color=#8DCA42>Land</color>";
+
+        string bonusText = "";
+        if (hoverStructure.bonusProperties.AoE && hoverStructure.bonusProperties.slow)
+            bonusText = "<color=white>Bonus: AoE(<color=green>" + hoverStructure.bonusProperties.radius + "</color>) / Slow(<color=blue>" + hoverStructure.bonusProperties.slowDurationInSeconds.ToString("F1") + "</color>)";
+        else if (hoverStructure.bonusProperties.AoE)
+            bonusText = "<color=white>Bonus: AoE(<color=green>" + hoverStructure.bonusProperties.radius + "</color>)";
+        else if (hoverStructure.bonusProperties.slow)
+            bonusText = "<color=white>Bonus: Slow(<color=blue>" + (hoverStructure.bonusProperties.slowPercent * 100).ToString("F1") + "%</color>)";
+        if (hoverStructure.bonusProperties.emitFromTower)
+            bonusText += "\n[Emits From Tower]";
+
+        string sellText;
+        if (hoverStructure.canSell)
+            sellText = "<color=white>Sell Price: <color=green>+ $" + hoverStructure.sellPrice+ "</color>";
+        else
+            sellText = "<color=red>Cannot Sell</color>";
+
+        string tooltip = "<u><b><color=black>[" + hoverStructure.structureName + "]</u></b></color>" +
+           "\nSize: " + hoverStructure.size +
+           "\nRange: " + "Range: " + hoverStructure.range.ToString("F0") +
+           "\n<color=purple>Pollution: " + hoverStructure.pollution.ToString("F0") +
+           (hoverStructure.powerStructure ? "\n\n<b><color=yellow>Powers Other Towers</b>\n<color=white>(Does Not Shoot)" : "\n" +
+           (structureCell.isPowered ? "" : "\n<color=red>Requires Power To Shoot") + "\n<color=white>Happiness Per Shot: " + hoverStructure.attackProperties.satisfaction.ToString("F0") +
+           "\nShots Per Second: " + hoverStructure.attackProperties.attackSpeed.ToString("F1")) +
+           "\n\n" + sellText + "\n" +
+            (!string.IsNullOrEmpty(requirementText) ? "\n" + requirementText : "") +
+            (!string.IsNullOrEmpty(bonusText) ? "\n" + bonusText : "");
+
+        selectedStructure.tooltipText.text = tooltip;
+        DisplayFactualTooltip(structureCell.structureProperty.name, structureCell.structureProperty.tooltip[Random.Range(0, structureCell.structureProperty.tooltip.Length)]);
+        currentStructureCell = structureCell;
     }
 
     internal void DeselectStructure()
     {
         selectedStructure.uiObject.SetActive(false);
         HideFactualTooltip();
+        currentStructureCell = null;
     }
     #endregion
 
@@ -268,32 +324,48 @@ public class GameManager : MonoBehaviour
 
         string requirementText = "";
         if(hoverStructure.buildRestrictions == StructurePropertyScriptableObject.LocationRestrictions.Water)
-        {
-            requirementText = "<color=white>Requires: <color=#00E0FF>Water";
-        }
+            requirementText = "<color=white>Requires: <color=#00E0FF>Water</color>";
         else if(hoverStructure.buildRestrictions == StructurePropertyScriptableObject.LocationRestrictions.Land)
-        {
-            requirementText = "<color=white>Requires: <color=#8DCA42>Land";
-        }
+            requirementText = "<color=white>Requires: <color=#8DCA42>Land</color>";
 
-        string tooltip = "<u>" + hoverStructure.structureName + "</u>" +
-            "\n\nSize: " + hoverStructure.size +
-            "\nHappiness Per Shot: " + hoverStructure.GetSatisfaction().ToString("F0") +
-            "\nShots Per Second: " + hoverStructure.GetAttackSpeed().ToString("F1") +
-            "\nRange: " + "Range: " + (hoverStructure.powerStructure ? hoverStructure.GetRange() : hoverStructure.GetRange() / 25).ToString("F0") +
-            "\nPollution: " + hoverStructure.GetPollution().ToString("F0") +
-            "\n\n" + (HasEnoughMoney(hoverStructure.cost[0]) ? "<color=green>" : "<color=red>") + "Cost: " + hoverStructure.cost[0] +
-            " <color=white>-- <color=yellow>(Current: " + economy.currentMoney + ")\n"+ requirementText;
+        string bonusText = "";
+        if(hoverStructure.bonusProperties.AoE && hoverStructure.bonusProperties.slow)
+            bonusText = "<color=white>Bonus: AoE(<color=green>" + hoverStructure.bonusProperties.radius + "</color>) / Slow(<color=blue>" + hoverStructure.bonusProperties.slowDurationInSeconds.ToString("F1") + "</color>)";
+        else if (hoverStructure.bonusProperties.AoE)
+            bonusText = "<color=white>Bonus: AoE(<color=green>" + hoverStructure.bonusProperties.radius + "</color>)";
+        else if (hoverStructure.bonusProperties.slow)
+            bonusText = "<color=white>Bonus: Slow(<color=blue>" + (hoverStructure.bonusProperties.slowPercent * 100).ToString("F1") + "%</color>)";
+
+        if (hoverStructure.bonusProperties.emitFromTower)
+            bonusText += "\n[Emits From Tower]";
+
+        string sellText;
+        if (hoverStructure.canSell)
+            sellText = "<color=white>Sell Price: <color=green>+ $" + hoverStructure.sellPrice + "</color>";
+        else
+            sellText = "<color=red>Cannot Sell</color>";
+
+        string tooltip = "<u><b><color=black>[" + hoverStructure.structureName + "]</u></b></color>" +
+            "\nSize: " + hoverStructure.size +
+            "\nRange: " + "Range: " + hoverStructure.range.ToString("F0") +
+            "\n<color=purple>Pollution: " + hoverStructure.pollution.ToString("F0") +
+            (hoverStructure.powerStructure ? "\n\n<b><color=yellow>Powers Other Towers</b>\n<color=white>(Does Not Shoot)" : "\n\n<color=red>Requires Power To Shoot\n<color=white>Happiness Per Shot: " + hoverStructure.attackProperties.satisfaction.ToString("F0") +
+            "\nShots Per Second: " + hoverStructure.attackProperties.attackSpeed.ToString("F1")) +
+            "\n\n" + (HasEnoughMoney(hoverStructure.cost) ? "<color=green>" : "<color=red>") + "Cost: " + hoverStructure.cost +
+            " <color=white>-- <color=yellow>(Current: " + economy.currentMoney + ")" +
+            "\n" + sellText + "\n" +
+            (!string.IsNullOrEmpty(requirementText) ? "\n" + requirementText : "") +
+            (!string.IsNullOrEmpty(bonusText) ? "\n" + bonusText : "");
 
         mouseTooltip.tooltipText.text = tooltip;
-        mouseTooltip.tooltipTransform.localPosition = Input.mousePosition - mouseTooltip.myCanvas.transform.localPosition;
+        //mouseTooltip.tooltipTransform.localPosition = Input.mousePosition - mouseTooltip.myCanvas.transform.localPosition;
     }
 
     //Called From UI Events
     public void HideMouseTooltip()
     {
         mouseTooltip.uiObject.SetActive(false);
-        mouseTooltip.tooltipTransform.localPosition = Input.mousePosition - mouseTooltip.myCanvas.transform.localPosition;
+        //mouseTooltip.tooltipTransform.localPosition = Input.mousePosition - mouseTooltip.myCanvas.transform.localPosition;
     }
     #endregion
 
@@ -309,9 +381,26 @@ public class GameManager : MonoBehaviour
         economy.currentMoneyText.text = "$ " + economy.currentMoney;
     }
 
-    internal void AddMoney(int moneyToAdd)
+    public void AddMoney(int moneyToAdd)
     {
         economy.currentMoney += moneyToAdd;
+        economy.currentMoneyText.text = "$ " + economy.currentMoney;
+        if (moneyAddedRoutine != null) StopCoroutine(moneyAddedRoutine);
+        moneyAddedRoutine = StartCoroutine(AddMoneyOverTime(economy.currentMoney - moneyToAdd));
+    }
+
+    IEnumerator AddMoneyOverTime(int startMoney)
+    {
+        float lerpTime = .25f;
+       
+        for (float i = 0; i < lerpTime; i += Time.deltaTime)
+        {
+            float perc = i / lerpTime;
+
+            economy.currentMoneyText.text = "$ " + (int)Mathf.Lerp(startMoney, economy.currentMoney, perc);
+            yield return null;
+        }
+
         economy.currentMoneyText.text = "$ " + economy.currentMoney;
     }
 
@@ -324,6 +413,31 @@ public class GameManager : MonoBehaviour
     {
         pathManager.UpdateSatisfiedCount(pathManager.currentPath.satisfiedCount, currentGeneration.unitsPerWave);
         AddMoney(currentGeneration.unitMoney);
+    }
+    #endregion
+
+    #region Pollution
+    public void AddPollution(int pollutionAmount)
+    {
+        pollution.currentPollution += pollutionAmount;
+        pollution.currentPollution = Mathf.Clamp(pollution.currentPollution, 0, pollution.totalAllowedPollution);
+        pollution.pollutionPercent = (float)pollution.currentPollution / pollution.totalAllowedPollution;
+        pollution.pollutionText.text = "<u>Pollution</u>\n" + (pollution.pollutionPercent * 100).ToString("F0") + "%";
+        if (pollutionFillRoutine != null) StopCoroutine(pollutionFillRoutine);
+        pollutionFillRoutine = StartCoroutine(UpdateFillImageOverTime());
+    }
+
+    IEnumerator UpdateFillImageOverTime()
+    {
+        float lerpTime = .25f;
+        float startPerc = pollution.pollutionFillImage.fillAmount;
+        for (float i = 0; i < lerpTime; i+= Time.deltaTime)
+        {
+            float perc = i / lerpTime;
+            pollution.pollutionFillImage.fillAmount = Mathf.Lerp(startPerc, pollution.pollutionPercent, perc);
+            yield return null;
+        }
+        pollution.pollutionFillImage.fillAmount = pollution.pollutionPercent;
     }
     #endregion
 }
@@ -339,11 +453,13 @@ public struct MainMenuUI
 public struct StructureSelectedUI
 {
     public GameObject uiObject;
-    public TMP_Text towerName;
-    public TMP_Text attackSpeed;
-    public TMP_Text range;
-    public TMP_Text satisfaction;
-    public TMP_Text pollution;
+    public TMP_Text tooltipText;
+    public Button selectedButton;
+    //public TMP_Text towerName;
+    //public TMP_Text attackSpeed;
+    //public TMP_Text range;
+    //public TMP_Text satisfaction;
+    //public TMP_Text bonuses;
 }
 
 [System.Serializable]
@@ -377,6 +493,16 @@ public struct WaveRecapUI
     public TMP_Text playersHappyRecap;
     public TMP_Text playersReallyHappyRecap;
     public TMP_Text nextWaveText;
+}
+
+[System.Serializable]
+public struct Pollution
+{
+    public int totalAllowedPollution;
+    public int currentPollution;
+    public float pollutionPercent;
+    public TMP_Text pollutionText;
+    public Image pollutionFillImage;
 }
 
 [System.Serializable]
@@ -454,16 +580,16 @@ public class Placeholder
     {
         uiObject.SetActive(true);
         show = true;
-        placementSprite.sprite = structureProperty.currentSprites[structureProperty.currentLevel];
+        placementSprite.sprite = structureProperty.currentSprite;
         placementSprite.transform.localScale = Vector3.one * .75f * structureProperty.size;
 
         if (structureProperty.powerStructure)
         {
-            rangePlacement_Power.localScale = Vector3.one * ((structureProperty.GetRange() * 2) + 1 + ((structureProperty.size - 1) * .7f));
+            rangePlacement_Power.localScale = Vector3.one * ((structureProperty.range * 2) + 1 + ((structureProperty.size - 1) * .7f));
         }
         else
         {
-            rangePlacement_Attack.localScale = Vector3.one * (structureProperty.GetRange() / 10);
+            rangePlacement_Attack.localScale = Vector3.one * structureProperty.range * 3f;
         }
     }
 

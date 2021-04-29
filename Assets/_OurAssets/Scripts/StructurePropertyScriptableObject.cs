@@ -6,53 +6,53 @@ public class StructurePropertyScriptableObject : ScriptableObject
     public enum LocationRestrictions { None, Land, Water}
 
     public string structureName;
-    public int currentLevel = 0;
+    public bool canSell = true;
+    public int cost;
+    public int sellPrice;
+    public float range;
+    [Range(1, 3)]
     public int size = 1;
+    public int pollution = 0;
+
+    [Header("Attack Properties")]
+    public AttackProperties attackProperties;
+
+    [Header("Restrictions")]
     public bool powerStructure = false;
     public LocationRestrictions buildRestrictions;
 
-    //public bool requireLand = false;
-    //public bool requireWater = false;
-    public TowerProperties towerProperties;
-    public int[] cost;
-    public Sprite[] currentSprites;
-    public GameObject[] structureObjects;
+    [Header("Bonuses")]
+    public BonusProperties bonusProperties;
+
+    [Header("References")]
+    public Sprite currentSprite;
+    public GameObject structureObject;
 
     [TextArea(3, 5)]
     public string[] tooltip;
-
-    internal float GetAttackSpeed()
-    {
-        return towerProperties.attackSpeed[currentLevel];
-    }
-
-    internal float GetRange()
-    {
-        return powerStructure ? towerProperties.range[currentLevel] : towerProperties.range[currentLevel] * 25;
-    }
-
-    internal float GetSatisfaction()
-    {
-        return towerProperties.satisfaction[currentLevel];
-    }
-
-    internal float GetPollution()
-    {
-        return towerProperties.pollution[currentLevel];
-    }
-
-    internal GameObject GetProjectile()
-    {
-        return towerProperties.projectiles[currentLevel];
-    }
 }
 
 [System.Serializable]
-public struct TowerProperties
+public struct AttackProperties
 {
-    public float[] attackSpeed;
-    public float[] range;
-    public float[] satisfaction;
-    public float[] pollution;
-    public GameObject[] projectiles;
+    public float attackSpeed;
+    public float satisfaction;
+    public GameObject projectile;
+}
+
+[System.Serializable]
+public struct BonusProperties
+{
+    [Header("Slow")]
+    public bool slow;
+    [Range(0, 1)]
+    public float slowPercent;
+    public float slowDurationInSeconds;
+
+    [Header("AoE")]
+    public bool AoE;
+    public float radius;
+
+    [Header("Emit From Tower")]
+    public bool emitFromTower;
 }
