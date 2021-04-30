@@ -39,6 +39,12 @@ public class GroundUnit : MonoBehaviour
 
     internal void Satisfy(float satisfyAmount)
     {
+
+        if(GameManager.singleton.pollution.pollutionPercent > .4f)
+        {
+            satisfyAmount = 1 - GameManager.singleton.pollution.pollutionPercent;
+        }
+
         if (satisfied)
         {
             currentFullySatisfiedPercent = Mathf.Clamp01(currentFullySatisfiedPercent + (satisfyAmount / GameManager.currentGeneration.unitFullHappiness));

@@ -292,6 +292,11 @@ public class GameManager : MonoBehaviour
         if (hoverStructure.bonusProperties.emitFromTower)
             bonusText += "\n[Emits From Tower]";
 
+        string attackText = "\n<color=white>Happiness Per Shot: " +
+            (pollution.pollutionPercent > .4f ? "<color=purple>" + (hoverStructure.attackProperties.satisfaction * (1 - pollution.pollutionPercent)).ToString("F1") + "</color>" :
+            hoverStructure.attackProperties.satisfaction.ToString("F0")) +
+            "\nShots Per Second: " + hoverStructure.attackProperties.attackSpeed.ToString("F1");
+
         string sellText;
         if (hoverStructure.canSell)
             sellText = "<color=white>Sell Price: <color=green>+ $" + hoverStructure.sellPrice+ "</color>";
@@ -303,8 +308,7 @@ public class GameManager : MonoBehaviour
            "\nRange: " + "Range: " + hoverStructure.range.ToString("F0") +
            "\n<color=purple>Pollution: " + hoverStructure.pollution.ToString("F0") +
            (hoverStructure.powerStructure ? "\n\n<b><color=yellow>Powers Other Towers</b>\n<color=white>(Does Not Shoot)" : "\n" +
-           (structureCell.isPowered ? "" : "\n<color=red>Requires Power To Shoot") + "\n<color=white>Happiness Per Shot: " + hoverStructure.attackProperties.satisfaction.ToString("F0") +
-           "\nShots Per Second: " + hoverStructure.attackProperties.attackSpeed.ToString("F1")) +
+           (structureCell.isPowered ? "" : "\n<color=red>Requires Power To Shoot") + attackText) +
            "\n\n" + sellText + "\n" +
             (!string.IsNullOrEmpty(requirementText) ? "\n" + requirementText : "") +
             (!string.IsNullOrEmpty(bonusText) ? "\n" + bonusText : "");
@@ -365,6 +369,13 @@ public class GameManager : MonoBehaviour
         if (hoverStructure.bonusProperties.emitFromTower)
             bonusText += "\n<color=#763200>[Emits From Tower]</color>";
 
+
+        string attackText = "\n\n<color=red>Requires Power To Shoot\n<color=white>Happiness Per Shot: " + 
+            (pollution.pollutionPercent > .4f ? "<color=purple>" + (hoverStructure.attackProperties.satisfaction * (1 - pollution.pollutionPercent)).ToString("F1") + "</color>" :
+            hoverStructure.attackProperties.satisfaction.ToString("F0")) +
+            "\nShots Per Second: " + hoverStructure.attackProperties.attackSpeed.ToString("F1");
+
+
         string sellText;
         if (hoverStructure.canSell)
             sellText = "<color=white>Sell Price: <color=green>+ $" + hoverStructure.sellPrice + "</color>";
@@ -375,8 +386,7 @@ public class GameManager : MonoBehaviour
             "\nSize: " + hoverStructure.size +
             "\nRange: " + "Range: " + hoverStructure.range.ToString("F0") +
             "\n<color=purple>Pollution: " + hoverStructure.pollution.ToString("F0") +
-            (hoverStructure.powerStructure ? "\n\n<b><color=yellow>Powers Other Towers</b>\n<color=white>(Does Not Shoot)" : "\n\n<color=red>Requires Power To Shoot\n<color=white>Happiness Per Shot: " + hoverStructure.attackProperties.satisfaction.ToString("F0") +
-            "\nShots Per Second: " + hoverStructure.attackProperties.attackSpeed.ToString("F1")) +
+            (hoverStructure.powerStructure ? "\n\n<b><color=yellow>Powers Other Towers</b>\n<color=white>(Does Not Shoot)" : attackText) +
             "\n\n" + (HasEnoughMoney(hoverStructure.cost) ? "<color=green>" : "<color=red>") + "Cost: " + hoverStructure.cost +
             " <color=white>-- <color=yellow>(Current: " + economy.currentMoney + ")" +
             "\n" + sellText + "\n" +

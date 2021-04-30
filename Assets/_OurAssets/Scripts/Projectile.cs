@@ -76,11 +76,15 @@ public class Projectile : MonoBehaviour
                     if (nearbyColliders[i].CompareTag("GroundUnit"))
                     {
                         GroundUnit unit = nearbyColliders[i].GetComponent<GroundUnit>();
-                        unit.Satisfy(myProperty.attackProperties.satisfaction);
-
-                        if (slow)
+                        if (!unit.fullySatisfied)
                         {
-                            unit.Slow(slowAmount, slowDuration);
+
+                            unit.Satisfy(myProperty.attackProperties.satisfaction);
+
+                            if (slow)
+                            {
+                                unit.Slow(slowAmount, slowDuration);
+                            }
                         }
                     }
                 }

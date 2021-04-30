@@ -336,6 +336,11 @@ public class GridInteraction : MonoBehaviour
         currentStructures.Remove(selectedCell);
         currentPowerStructures.Remove(selectedCell);
         RemoveSelected();
+
+        for (int i = 0; i < currentPowerStructures.Count; i++)
+        {
+            currentPowerStructures[i].PowerArea();
+        }
     }
     #endregion
 
