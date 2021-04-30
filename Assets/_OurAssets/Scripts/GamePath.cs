@@ -72,7 +72,7 @@ public class GamePath : MonoBehaviour
         if (currentUnits.Contains(unit))
         {
             currentUnits.Remove(unit);
-            if (currentSpawnCount == totalSpawnCount && currentUnits.Count <= 0)
+            if (currentSpawnCount == totalSpawnCount && currentUnits.Count <= 0 & !GameManager.failed)
             {
                 Debug.Log("Wave Finished");
                 roundActive = false;
@@ -102,7 +102,7 @@ public class GamePath : MonoBehaviour
         if (currentUnits.Contains(finishedUnit))
         {
             currentUnits.Remove(finishedUnit);
-            if (currentUnits.Count <= 0 && roundActive)
+            if (currentUnits.Count <= 0 && roundActive &! GameManager.failed)
             {
                 Debug.Log("Wave Finished");
                 roundActive = false;
@@ -117,7 +117,7 @@ public class GamePath : MonoBehaviour
 
         if (!finishedUnit.satisfied)
         {
-            //Leak Here
+            GameManager.singleton.pathManager.Leak();
         }
 
         Destroy(finishedUnit.gameObject);

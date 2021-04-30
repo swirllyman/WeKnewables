@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 public class CameraController : MonoBehaviour
 {
@@ -12,7 +13,9 @@ public class CameraController : MonoBehaviour
     public Vector2 boundsY;
     public Vector2 minMaxZoom;
     public float dragSpeed = 2;
+    public float dragSpeedMaxZoom = 15;
     public Rigidbody2D myBody;
+
 
     Vector3 dragOrigin;
 
@@ -39,6 +42,7 @@ public class CameraController : MonoBehaviour
         MoveToDestination(0);
         gameplayMenu.SetActive(true);
         startGameMenu.SetActive(false);
+        GameManager.singleton.StartNewGame();
     }
 
     public void PlayIntialGameStartWtihCheats()
@@ -47,6 +51,7 @@ public class CameraController : MonoBehaviour
         gameplayMenu.SetActive(true);
         startGameMenu.SetActive(false);
         cheatsMenu.SetActive(true);
+        GameManager.singleton.StartNewGame();
     }
 
     public void MoveToOverview()
@@ -75,7 +80,6 @@ public class CameraController : MonoBehaviour
             if(Vector3.Distance(transform.position, destination) < .1f)
             {
                 destination = Vector3.zero;
-                GridInteraction.singleton.ActivateSelectMode();
             }
         }
 
@@ -131,7 +135,7 @@ public class CameraController : MonoBehaviour
     {
         if (destination != Vector3.zero) return;
 
-        if (Input.GetMouseButtonDown(0) && GridInteraction.singleton.currentSelectionMode == GridInteraction.SelectionMode.Select)
+        if (Input.GetMouseButtonDown(0) && GridInteraction.singleton.currentSelectionMode == GridInteraction.SelectionMode.Select && !EventSystem.current.IsPointerOverGameObject())
         {
             dragOrigin = Input.mousePosition;
             dragging = true;
@@ -147,7 +151,9 @@ public class CameraController : MonoBehaviour
         if (dragging)
         {
             Vector2 movePos = Input.mousePosition - dragOrigin;
-            Vector3 move = new Vector3(movePos.x * dragSpeed, movePos.y * dragSpeed) * Time.deltaTime;
+            float moveLerp = Mathf.Lerp(1, dragSpeedMaxZoom, (zoom + minMaxZoom.x) / (minMaxZoom.y + minMaxZoom.y));
+
+            Vector3 move = new Vector3(movePos.x * dragSpeed * moveLerp, movePos.y * dragSpeed * moveLerp);
 
             if(transform.position.x - move.x > boundsX.x && transform.position.x - move.x < boundsX.y && transform.position.y - move.y > boundsY.x && transform.position.y - move.y < boundsY.y)
             {

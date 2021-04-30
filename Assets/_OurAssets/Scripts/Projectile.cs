@@ -56,6 +56,10 @@ public class Projectile : MonoBehaviour
                 HitTarget();
             }
         }
+        else
+        {
+            Destroy(gameObject);
+        }
     }
 
     //Override this for different attack types (slow, aoe, etc...)

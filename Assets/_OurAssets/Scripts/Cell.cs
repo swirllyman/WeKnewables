@@ -33,7 +33,7 @@ public class Cell : MonoBehaviour, ISelectable
 
     void Update()
     {
-        if(target != null && isPowered)
+        if(target != null && isPowered &! GameManager.failed)
         {
             currentAttackTime -= Time.deltaTime;
             if(currentAttackTime <= 0.0f)
@@ -54,7 +54,7 @@ public class Cell : MonoBehaviour, ISelectable
 
     public void DetermineBuildable()
     {
-        SetBuildable(CheckStructure() && CheckRestrictions() && CheckPower() && placeableArea && GameManager.HasEnoughMoney(GameManager.currentStructure.cost));
+        SetBuildable(CheckStructure() && CheckRestrictions() && CheckPower() && placeableArea && GameManager.HasEnoughMoney(GameManager.currentStructure.cost) && GameManager.HasEnoughPollution(GameManager.currentStructure.pollution));
     }
 
     bool CheckStructure()
@@ -123,7 +123,7 @@ public class Cell : MonoBehaviour, ISelectable
 
     private void SubTrigger_onTrigger(Collider2D collider, bool entered)
     {
-
+        if (GameManager.failed) return;
         if (collider.CompareTag("GroundUnit"))
         {
             if (entered)

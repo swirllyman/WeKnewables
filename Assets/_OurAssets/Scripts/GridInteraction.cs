@@ -263,7 +263,8 @@ public class GridInteraction : MonoBehaviour
             }
         }
 
-        ActivateSelectMode();
+        if (!Input.GetKey(KeyCode.LeftShift))
+            ActivateSelectMode();
     }
 
     #endregion

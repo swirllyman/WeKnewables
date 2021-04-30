@@ -114,7 +114,7 @@ public class GroundUnit : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (runningPath)
+        if (runningPath &! GameManager.failed)
         {
             transform.position += (destination - transform.position).normalized * Time.fixedDeltaTime * currentSpeed * 2;
 

@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
@@ -10,8 +11,10 @@ public class GameManager : MonoBehaviour
     public static StructurePropertyScriptableObject currentStructure;
     public static GenerationScriptableObject currentGeneration;
     public static int waveNum = 0;
+    public static bool failed = false;
 
     public CameraController cameraController;
+    public Image[] UICostImages;
     public StructurePropertyScriptableObject[] structureProperties;
     public GenerationScriptableObject[] generationProperties;
 
@@ -51,6 +54,7 @@ public class GameManager : MonoBehaviour
         currentGeneration = generationProperties[0];
         ShowNextPath();
         AddPollution(0);
+        UpdateButtons();
     }
 
     private void Update()
@@ -91,6 +95,12 @@ public class GameManager : MonoBehaviour
     }
 
     #region UI Buttons
+    internal void StartNewGame()
+    {
+        pathManager.totalLeaks = 0;
+        failed = false;
+    }
+
     public void SellCurrentTower()
     {
         print("Getting Here?FDgsDS?");
@@ -129,6 +139,23 @@ public class GameManager : MonoBehaviour
     #endregion
 
     #region Waves
+    public void Fail()
+    {
+        failed = true;
+        StartCoroutine(FailedGameRoutine());
+    }
+
+    IEnumerator FailedGameRoutine()
+    {
+        PlayNotification("Game Failed. Too Many Unfulfilled People.", 3.0f);
+        yield return new WaitForSeconds(3.0f);
+        PlayNotification("Wave: "+waveNum+", Gen: "+currentGenerationID, 3.0f);
+        yield return new WaitForSeconds(3.0f);
+        PlayNotification("Game Restarting in 1 second.");
+        yield return new WaitForSeconds(1.0f);
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+
     internal void WaveFinished()
     {
         StartCoroutine(PostRoundDisplay());
@@ -181,7 +208,6 @@ public class GameManager : MonoBehaviour
         AddMoney(currentGeneration.unitMoney * pathManager.currentPath.fullySatisfiedCount);
         for (int i = 3; i > 0; i--)
         {
-            PlayNotification("Next Wave In: " + i, 1.5f);
             waveRecap.nextWaveText.text = "Next Wave Starting In: " + i;
             yield return new WaitForSeconds(1.0f);
         }
@@ -330,14 +356,14 @@ public class GameManager : MonoBehaviour
 
         string bonusText = "";
         if(hoverStructure.bonusProperties.AoE && hoverStructure.bonusProperties.slow)
-            bonusText = "<color=white>Bonus: AoE(<color=green>" + hoverStructure.bonusProperties.radius + "</color>) / Slow(<color=blue>" + hoverStructure.bonusProperties.slowDurationInSeconds.ToString("F1") + "</color>)";
+            bonusText = "<color=white>Bonus: <color=#FFC100>AoE(" + hoverStructure.bonusProperties.radius + "</color>) / <color=blue>Slow(" + hoverStructure.bonusProperties.slowDurationInSeconds.ToString("F1") + "</color>)";
         else if (hoverStructure.bonusProperties.AoE)
-            bonusText = "<color=white>Bonus: AoE(<color=green>" + hoverStructure.bonusProperties.radius + "</color>)";
+            bonusText = "<color=white>Bonus: <color=#FFC100>AoE(" + hoverStructure.bonusProperties.radius + "</color>)";
         else if (hoverStructure.bonusProperties.slow)
-            bonusText = "<color=white>Bonus: Slow(<color=blue>" + (hoverStructure.bonusProperties.slowPercent * 100).ToString("F1") + "%</color>)";
+            bonusText = "<color=white>Bonus: <color=blue>Slow(" + (hoverStructure.bonusProperties.slowPercent * 100).ToString("F1") + "%</color>)";
 
         if (hoverStructure.bonusProperties.emitFromTower)
-            bonusText += "\n[Emits From Tower]";
+            bonusText += "\n<color=#763200>[Emits From Tower]</color>";
 
         string sellText;
         if (hoverStructure.canSell)
@@ -379,6 +405,7 @@ public class GameManager : MonoBehaviour
     {
         economy.currentMoney -= moneyToRemove;
         economy.currentMoneyText.text = "$ " + economy.currentMoney;
+        UpdateButtons();
     }
 
     public void AddMoney(int moneyToAdd)
@@ -387,6 +414,16 @@ public class GameManager : MonoBehaviour
         economy.currentMoneyText.text = "$ " + economy.currentMoney;
         if (moneyAddedRoutine != null) StopCoroutine(moneyAddedRoutine);
         moneyAddedRoutine = StartCoroutine(AddMoneyOverTime(economy.currentMoney - moneyToAdd));
+
+        UpdateButtons();
+    }
+
+    void UpdateButtons()
+    {
+        for (int i = 0; i < UICostImages.Length; i++)
+        {
+            UICostImages[i].enabled = structureProperties[i].cost > economy.currentMoney;
+        }
     }
 
     IEnumerator AddMoneyOverTime(int startMoney)
@@ -417,6 +454,11 @@ public class GameManager : MonoBehaviour
     #endregion
 
     #region Pollution
+    public static bool HasEnoughPollution(int amount)
+    {
+        return (amount  + singleton.pollution.currentPollution) <= singleton.pollution.totalAllowedPollution;
+    }
+
     public void AddPollution(int pollutionAmount)
     {
         pollution.currentPollution += pollutionAmount;
@@ -523,8 +565,22 @@ public class PathManager
     public GameObject currentWaveUI;
     public TMP_Text waveCountText;
     public TMP_Text fullySatisfiedText;
+    public TMP_Text livesLostText;
 
     internal GamePath currentPath;
+
+    internal int totalAllowedLeaks = 10;
+    internal int totalLeaks = 0;
+    internal void Leak()
+    {
+        totalLeaks++;
+        livesLostText.text = "Lives Lost: " + totalLeaks + " / " + totalAllowedLeaks;
+
+        if(totalLeaks > totalAllowedLeaks)
+        {
+            GameManager.singleton.Fail();
+        }
+    }
 
     internal void SetupNextPath(int newPathID)
     {
