@@ -33,6 +33,11 @@ public class Grid : MonoBehaviour
                 cellArray[k].cells[l].DisableHighlight();
     }
 
+    private void OnDestroy()
+    {
+        singleton = null;
+    }
+
     private void Update()
     {
         for (int row = 0; row < rows; row++)

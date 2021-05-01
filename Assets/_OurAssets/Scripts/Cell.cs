@@ -16,6 +16,7 @@ public class Cell : MonoBehaviour, ISelectable
     public bool placeableArea = true;
     public bool waterArea = false;
 
+    internal float totalDamage;
     internal bool isPowered;
     internal bool buildable = true;
     internal bool hasStructure;
@@ -28,8 +29,14 @@ public class Cell : MonoBehaviour, ISelectable
 
     internal StructurePropertyScriptableObject structureProperty;
 
+    ParticleSystem pollutedParticles;
     GroundUnit target;
     float currentAttackTime = 0.0f;
+
+    void Start()
+    {
+        GameManager.singleton.onPollutionChange += PollutionChange;
+    }
 
     void Update()
     {
@@ -43,13 +50,35 @@ public class Cell : MonoBehaviour, ISelectable
         }
     }
 
+    void PollutionChange()
+    {
+        if (GameManager.pollutionLevel > 0)
+        {
+            if (pollutedParticles != null)
+            {
+                ParticleSystem.EmissionModule emission = pollutedParticles.emission;
+                var em = emission.rateOverTime;
+                em.constantMin = GameManager.pollutionLevel * 1;
+                em.constantMax = GameManager.pollutionLevel * 3;
+
+                emission.rateOverTime = em;
+            }
+        }
+        else
+        {
+            if(pollutedParticles != null)
+                pollutedParticles.Stop();
+        }
+    }
+
     void Attack()
     {
         currentAttackTime = structureProperty.attackProperties.attackSpeed;
         GameObject projectileObject = Instantiate(structureProperty.attackProperties.projectile, transform);
 
         Projectile projectile = projectileObject.GetComponent<Projectile>();
-        projectile.Fire(target, structureProperty, GetMidPoint(), structureProperty.bonusProperties) ;
+        projectile.Fire(target, structureProperty, GetMidPoint(), structureProperty.bonusProperties);
+        totalDamage += structureProperty.attackProperties.satisfaction;
     }
 
     public void DetermineBuildable()
@@ -119,6 +148,19 @@ public class Cell : MonoBehaviour, ISelectable
         currentStructureObject.transform.position = GetMidPoint();
         currentStructureObject.transform.localScale *= structureProperty.size;
         LeanTween.scale(currentStructureObject, currentStructureObject.transform.localScale * 1.25f, 1.0f).setEasePunch();
+
+        pollutedParticles = currentStructureObject.GetComponentInChildren<ParticleSystem>();
+
+        if (GameManager.pollutionLevel > 0)
+        {
+            ParticleSystem.EmissionModule emission = pollutedParticles.emission;
+            var em = emission.rateOverTime;
+            em.constantMin = GameManager.pollutionLevel * 1;
+            em.constantMax = GameManager.pollutionLevel * 3;
+
+            emission.rateOverTime = em;
+            pollutedParticles.Play();
+        }
     }
 
     private void SubTrigger_onTrigger(Collider2D collider, bool entered)
@@ -183,6 +225,7 @@ public class Cell : MonoBehaviour, ISelectable
 
     void RemoveCurrentTarget(bool resetCollider = true)
     {
+        target.onSatisfied -= TargetSatisfied;
         target.onFullySatisfied -= TargetFullySatisfied;
         target.onFinishedPath -= TargetFinishedPath;
         target = null;
@@ -248,6 +291,8 @@ public class Cell : MonoBehaviour, ISelectable
     {
         if(structureProperty != null)
         {
+            totalDamage = 0;
+            pollutedParticles = null;
             hasStructure = false;
             Destroy(currentStructureObject);
 

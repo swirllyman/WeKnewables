@@ -40,6 +40,11 @@ public class GridInteraction : MonoBehaviour
         }
     }
 
+    private void OnDestroy()
+    {
+        singleton = null;
+    }
+
     void Update()
     {
         CheckMouseCell();

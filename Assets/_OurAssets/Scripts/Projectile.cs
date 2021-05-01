@@ -11,6 +11,7 @@ public class Projectile : MonoBehaviour
     public float projectileSpeed = .5f;
     public GameObject hitEffect;
     public GameObject aoeEffect;
+    public GameObject aoeSlowEffect;
     public GameObject rendObject;
 
 
@@ -103,8 +104,17 @@ public class Projectile : MonoBehaviour
 
         if (aoe)
         {
-            if (aoeEffect != null)
-                Instantiate(aoeEffect, transform.position, Quaternion.identity).transform.localScale *= aoeRadius;
+            if (slow)
+            {
+                if (aoeSlowEffect != null)
+                    Instantiate(aoeSlowEffect, transform.position, Quaternion.identity).transform.localScale *= aoeRadius;
+            }
+            else
+            {
+
+                if (aoeEffect != null)
+                    Instantiate(aoeEffect, transform.position, Quaternion.identity).transform.localScale *= aoeRadius;
+            }
         }
         else
         {

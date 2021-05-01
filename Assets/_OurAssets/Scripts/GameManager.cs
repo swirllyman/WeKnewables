@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
@@ -11,7 +12,10 @@ public class GameManager : MonoBehaviour
     public static StructurePropertyScriptableObject currentStructure;
     public static GenerationScriptableObject currentGeneration;
     public static int waveNum = 0;
+    public static int currentGen = 0;
+    public static int pollutionLevel = 0;
     public static bool failed = false;
+    public static bool cheating = false;
 
     public CameraController cameraController;
     public Image[] UICostImages;
@@ -26,22 +30,33 @@ public class GameManager : MonoBehaviour
     public GameNotificationUI gameNotification;
     public WaveRecapUI waveRecap;
     public Pollution pollution;
+    public FastForward fastForward;
 
     [Header("Classes")]
     public Placeholder placeholder;
     public PathManager pathManager;
     public Economy economy;
 
+
     internal int currentStructureID;
     internal int nextPathID = 0;
+    internal int totalSets = 0;
+    internal int totalWaves = 0;
 
-    int currentGenerationID = 0;
+    bool recap = false;
+    bool buildPhase = false;
+    float buildPhaseTimer = 0.0f;
+
     Cell currentStructureCell;
 
     Coroutine pathRoutine;
     Coroutine currentNotificationRoutine;
     Coroutine pollutionFillRoutine;
     Coroutine moneyAddedRoutine;
+    Coroutine endOfRoundRecap;
+
+    public delegate void PollutionCallback();
+    public event PollutionCallback onPollutionChange;
 
     private void Awake()
     {
@@ -49,12 +64,25 @@ public class GameManager : MonoBehaviour
         factualTooltip.uiObject.SetActive(false);
         selectedStructure.uiObject.SetActive(false);
         HideMouseTooltip();
-        economy.currentMoneyText.text = "$ " +economy.currentMoney;
+        economy.currentMoneyText.text = "$ " + economy.currentMoney;
 
         currentGeneration = generationProperties[0];
+        waveNum = 0;
+        currentGen = 0;
+        pollutionLevel = 0;
+        failed = false;
+
+        LeanTween.scale(mainMenuUI.gameLogo, mainMenuUI.gameLogo.transform.localScale * 1.05f, .45f).setLoopPingPong().setEaseInExpo();
         ShowNextPath();
         AddPollution(0);
         UpdateButtons();
+        UpdateUIPanel(0);
+        pathManager.UpdateNextWaveText();
+    }
+
+    private void OnDestroy()
+    {
+        singleton = null;
     }
 
     private void Update()
@@ -66,7 +94,7 @@ public class GameManager : MonoBehaviour
 
         if (placeholder.show)
         {
-            if(GridInteraction.singleton.currentCell == null)
+            if (GridInteraction.singleton.currentCell == null)
             {
                 placeholder.HidePlaceholder();
             }
@@ -75,8 +103,84 @@ public class GameManager : MonoBehaviour
                 placeholder.UpdatePlaceholderPosition(GridInteraction.singleton.GetCurrentPlacementPosition(), currentStructure.powerStructure);
             }
         }
+
+        if (!cheating && buildPhase)
+        {
+            if(buildPhaseTimer >= 0.0f)
+            {
+                buildPhaseTimer -= Time.deltaTime;
+                pathManager.nextWaveTimer.text = "Starting in " + buildPhaseTimer.ToString("F1");
+                if (buildPhaseTimer <= 10.0f &! pathManager.warning)
+                {
+                    pathManager.warning = true;
+                    PlayNotification("Wave Starting In 10 Seconds!");
+                }
+
+                if(buildPhaseTimer <= 0.0f)
+                {
+                    buildPhase = false;
+                    SendWave();
+                }
+            }
+        }
     }
 
+    public static float CurrentGenHappiness()
+    {
+        return currentGeneration.unitHappiness * (1 + (singleton.totalSets * 10));
+    }
+
+    public static float CurrentGenFullHappiness()
+    {
+        return currentGeneration.unitFullHappiness * (1 + (singleton.totalSets * 10));
+    }
+
+    public static float GetCurrentGenSpeed()
+    {
+        return (1 + (waveNum * .25f)) * (1 + singleton.totalSets);
+    }
+
+    public static float GetCurrentGenMoney()
+    {
+        return currentGeneration.unitMoney * (1 + (singleton.totalSets * 10));
+    }
+
+    void StopFF()
+    {
+        fastForward.ffState = FastForward.FF_State.Normal;
+        Time.timeScale = 1.0f;
+        fastForward.speedChangeImage.sprite = fastForward.ffIcons[1];
+    }
+
+    #region FastForward
+    void CycleNextFFState()
+    {
+        int currentState = (int)fastForward.ffState;
+
+        currentState = (currentState + 1) % Enum.GetValues(typeof(FastForward.FF_State)).Length;
+        fastForward.ffState = (FastForward.FF_State)currentState;
+
+        switch (fastForward.ffState)
+        {
+            case FastForward.FF_State.Normal :
+                StopFF();
+                break;
+
+            case FastForward.FF_State.Medium:
+                Time.timeScale = 5.0f;
+                fastForward.speedChangeImage.sprite = fastForward.ffIcons[2];
+                break;
+
+            case FastForward.FF_State.Maximum:
+                Time.timeScale = 15.0f;
+                fastForward.speedChangeImage.sprite = fastForward.ffIcons[0];
+                break;
+        }
+    }
+    #endregion
+
+
+    #region Notification
     internal void PlayNotification(string notification, float holdTime = 2.0f)
     {
         gameNotification.notificationText.text = notification;
@@ -93,22 +197,36 @@ public class GameManager : MonoBehaviour
         gameNotification.notificationText.transform.localScale = Vector3.one;
         LeanTween.scale(gameNotification.notificationText.rectTransform, Vector3.zero, .25f).setEaseInExpo();
     }
+    #endregion
 
     #region UI Buttons
-    internal void StartNewGame()
+    public void ChangeSpeed()
     {
-        pathManager.totalLeaks = 0;
-        failed = false;
+        if(recap)
+        {
+            StopCoroutine(endOfRoundRecap);
+            endOfRoundRecap = null;
+            StartCoroutine(ShowNextPath(.5f));
+            waveRecap.nextWaveText.text = "";
+            waveRecap.uiObject.SetActive(false);
+        }
+        else if(!buildPhase)
+        {
+            CycleNextFFState();
+        }
     }
 
     public void SellCurrentTower()
     {
-        print("Getting Here?FDgsDS?");
         if (currentStructureCell != null)
         {
-            print("Getting Here?FDgsDS?");
             currentStructureCell.SellStructure();
         }
+    }
+
+    public void RestartGame()
+    {
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 
     //Called Fom UI Button
@@ -116,6 +234,11 @@ public class GameManager : MonoBehaviour
     {
         StopCoroutine(pathRoutine);
         pathManager.StartPath();
+        totalWaves++;
+        waveRecap.currentText.text = "Wave " + totalWaves + " / Gen " + (currentGen + 1);
+        pathManager.currentWaveText.text = "Wave " + totalWaves;
+        PlayNotification("Wave " + totalWaves+ " Has Started!");
+        buildPhase = false;
     }
 
     //Called From UI Buttons
@@ -139,9 +262,18 @@ public class GameManager : MonoBehaviour
     #endregion
 
     #region Waves
+    internal void StartNewGame()
+    {
+        pathManager.totalLeaks = 0;
+        failed = false;
+    }
+
     public void Fail()
     {
         failed = true;
+        if (fastForward.ffState != FastForward.FF_State.Normal)
+            StopFF();
+
         StartCoroutine(FailedGameRoutine());
     }
 
@@ -149,8 +281,10 @@ public class GameManager : MonoBehaviour
     {
         PlayNotification("Game Failed. Too Many Unfulfilled People.", 3.0f);
         yield return new WaitForSeconds(3.0f);
-        PlayNotification("Wave: "+waveNum+", Gen: "+currentGenerationID, 3.0f);
-        yield return new WaitForSeconds(3.0f);
+        PlayNotification("Wave: " + totalWaves + ", Gen: " + (currentGen + 1), 60.0f);
+        yield return new WaitForSeconds(1.0f);
+        mainMenuUI.restartButton.SetActive(true);
+        yield return new WaitForSeconds(60.0f);
         PlayNotification("Game Restarting in 1 second.");
         yield return new WaitForSeconds(1.0f);
         SceneManager.LoadScene(SceneManager.GetActiveScene().name);
@@ -158,19 +292,26 @@ public class GameManager : MonoBehaviour
 
     internal void WaveFinished()
     {
-        StartCoroutine(PostRoundDisplay());
+        if (fastForward.ffState != FastForward.FF_State.Normal)
+            StopFF();
+
+        AddMoney((int)(GetCurrentGenMoney() / 2) * pathManager.currentPath.fullySatisfiedCount);
+        AddMoney((int)GetCurrentGenMoney() * pathManager.currentPath.satisfiedCount);
+        AddMoney(currentGeneration.waveEndBonus);
+
+        if (endOfRoundRecap != null) StopCoroutine(endOfRoundRecap);
+        endOfRoundRecap = StartCoroutine(PostRoundDisplay());
     }
 
     IEnumerator PostRoundDisplay()
     {
-        int path = nextPathID;
-        PlayNotification("Wave "+ nextPathID+" Complete!", 1.5f);
+        recap = true;
+        PlayNotification("Wave " + totalWaves + " Complete!", 1.5f);
         yield return new WaitForSeconds(.5f);
         cameraController.MoveToOverview();
 
         yield return new WaitForSeconds(1.0f);
-        PlayNotification("Wave Bonus: "+currentGeneration.waveEndBonus, 1.5f);
-        AddMoney(currentGeneration.waveEndBonus);
+        PlayNotification("Wave Bonus: " + currentGeneration.waveEndBonus, 1.5f);
         waveRecap.uiObject.SetActive(true);
         waveRecap.playersHappyRecap.text = "";
         waveRecap.playersReallyHappyRecap.text = "";
@@ -185,27 +326,24 @@ public class GameManager : MonoBehaviour
             float perc = Mathf.Clamp01(i / lerpTime);
             satisfied = Mathf.Lerp(0, pathManager.currentPath.satisfiedCount, perc);
 
-            waveRecap.playersHappyRecap.text = "<u>Happy Players</u>\n" + (int)satisfied + " / " + totalSpawnCount + "\t<color=yellow>+" + (int)(satisfied * currentGeneration.unitMoney);
+            waveRecap.playersHappyRecap.text = "Happy Players\n" + (int)satisfied + " / " + totalSpawnCount + "\t<color=yellow>+" + (int)(satisfied * currentGeneration.unitMoney);
             yield return null;
         }
 
-        waveRecap.playersHappyRecap.text = "<u>Happy Players</u>\n" + pathManager.currentPath.satisfiedCount + " / " + pathManager.currentPath.totalSpawnCount +
+        waveRecap.playersHappyRecap.text = "Happy Players\n" + pathManager.currentPath.satisfiedCount + " / " + pathManager.currentPath.totalSpawnCount +
            "\t<color=yellow>+" + pathManager.currentPath.satisfiedCount * currentGeneration.unitMoney;
-        AddMoney(currentGeneration.unitMoney * pathManager.currentPath.satisfiedCount);
 
         lerpTime = Mathf.Lerp(.25f, 1.0f, pathManager.currentPath.fullySatisfiedCount / totalSpawnCount);
         for (float i = 0.0f; i <= lerpTime; i += Time.deltaTime)
         {
             float perc = Mathf.Clamp01(i / lerpTime);
             fullySatisfied = Mathf.Lerp(0, pathManager.currentPath.fullySatisfiedCount, perc);
-            waveRecap.playersReallyHappyRecap.text = "<u>Very Happy Players</u>\n" + (int)fullySatisfied + " / " + totalSpawnCount + "\t<color=yellow>+" + (int)(fullySatisfied * currentGeneration.unitMoney);
+            waveRecap.playersReallyHappyRecap.text = "Very Happy Players<\n" + (int)fullySatisfied + " / " + totalSpawnCount + "\t<color=yellow>+" + (int)(fullySatisfied * currentGeneration.unitMoney);
             yield return null;
         }
 
-        waveRecap.playersReallyHappyRecap.text = "<u>Very Happy Players</u>\n" + pathManager.currentPath.fullySatisfiedCount + " / " + pathManager.currentPath.totalSpawnCount +
+        waveRecap.playersReallyHappyRecap.text = "Very Happy Players\n" + pathManager.currentPath.fullySatisfiedCount + " / " + pathManager.currentPath.totalSpawnCount +
             "\t<color=yellow>+" + pathManager.currentPath.fullySatisfiedCount * currentGeneration.unitMoney;
-
-        AddMoney(currentGeneration.unitMoney * pathManager.currentPath.fullySatisfiedCount);
         for (int i = 3; i > 0; i--)
         {
             waveRecap.nextWaveText.text = "Next Wave Starting In: " + i;
@@ -216,26 +354,54 @@ public class GameManager : MonoBehaviour
         waveRecap.uiObject.SetActive(false);
 
         yield return new WaitForSeconds(.25f);
+
+        StartCoroutine(ShowNextPath(.5f));
+    }
+
+    IEnumerator ShowNextPath(float waitTime = .5f)
+    {
+        recap = false;
+        buildPhase = true;
+        buildPhaseTimer = currentGeneration.buildTime;
+        if (endOfRoundRecap != null) StopCoroutine(endOfRoundRecap);
+        endOfRoundRecap = null;
         
-        if(nextPathID == 0)
+        if (nextPathID == 0)
         {
-            PlayNotification("Generation "+ (++currentGenerationID) +" Finished!");
+            currentGen++;
+            PlayNotification("Generation " + currentGen + " Finished!");
+            if (currentGen % generationProperties.Length == 0)
+            {
+                totalSets++;
+            }
             yield return new WaitForSeconds(1.5f);
         }
 
+        int pathID = nextPathID;
         ShowNextPath();
 
-        PlayNotification("Wave " + nextPathID + " Starting");
+        yield return new WaitForSeconds(1.0f);
+
+        //PlayNotification("Wave " + totalWaves + " Starting");
         waveNum = (waveNum + 1) % pathManager.gamePaths.Length;
-        yield return new WaitForSeconds(.5f);
-        cameraController.MoveToDestination(path);
-        yield return new WaitForSeconds(.5f);
+        yield return new WaitForSeconds(waitTime);
+        cameraController.MoveToDestination(pathID);
+        yield return new WaitForSeconds(waitTime);
         PlayNotification("Build Phase!");
+        if (fastForward.ffState != FastForward.FF_State.Normal)
+            StopFF();
+
+        if (!cheating)
+        {
+            yield return new WaitForSeconds(1.5f);
+            PlayNotification("Wave " + totalWaves + " Starting In " + currentGeneration.buildTime.ToString("F0") + " Seconds!");
+        }
     }
 
     internal void ShowNextPath()
     {
-        currentGeneration = generationProperties[currentGenerationID % generationProperties.Length];
+        recap = false;
+        currentGeneration = generationProperties[currentGen % generationProperties.Length];
         pathManager.SetupNextPath(nextPathID);
 
         if (pathRoutine != null) StopCoroutine(pathRoutine);
@@ -250,10 +416,10 @@ public class GameManager : MonoBehaviour
         {
             for (int i = 0; i < pathManager.currentPath.waypoints.Length - 1; i++)
             {
-                Vector3 currentWaypoint = pathManager.currentPath.transform.position +  pathManager.currentPath.waypoints[i];
-                Vector3 nextWaypoint = pathManager.currentPath.transform.position +  pathManager.currentPath.waypoints[i + 1];
+                Vector3 currentWaypoint = pathManager.currentPath.transform.position + pathManager.currentPath.waypoints[i];
+                Vector3 nextWaypoint = pathManager.currentPath.transform.position + pathManager.currentPath.waypoints[i + 1];
                 float lerpTime = Mathf.Lerp(.03f, .3f, (Vector2.Distance(currentWaypoint, nextWaypoint) + .5f) / (10 + .5f));
-                for(float j = 0; j < lerpTime; j += Time.deltaTime)
+                for (float j = 0; j < lerpTime; j += Time.deltaTime)
                 {
                     pathManager.currentPathParticles.transform.position = Vector2.Lerp(currentWaypoint, nextWaypoint, j / lerpTime);
                     yield return null;
@@ -283,38 +449,39 @@ public class GameManager : MonoBehaviour
             requirementText = "<color=white>Requires: <color=#8DCA42>Land</color>";
 
         string bonusText = "";
-        if (hoverStructure.bonusProperties.AoE && hoverStructure.bonusProperties.slow)
-            bonusText = "<color=white>Bonus: AoE(<color=green>" + hoverStructure.bonusProperties.radius + "</color>) / Slow(<color=blue>" + hoverStructure.bonusProperties.slowDurationInSeconds.ToString("F1") + "</color>)";
-        else if (hoverStructure.bonusProperties.AoE)
-            bonusText = "<color=white>Bonus: AoE(<color=green>" + hoverStructure.bonusProperties.radius + "</color>)";
-        else if (hoverStructure.bonusProperties.slow)
-            bonusText = "<color=white>Bonus: Slow(<color=blue>" + (hoverStructure.bonusProperties.slowPercent * 100).ToString("F1") + "%</color>)";
         if (hoverStructure.bonusProperties.emitFromTower)
-            bonusText += "\n[Emits From Tower]";
+            bonusText = "\n<color=#FFBA88>[Emits From Tower]</color>";
+        if (hoverStructure.bonusProperties.AoE && hoverStructure.bonusProperties.slow)
+            bonusText += "<color=white>Bonus: AoE(<color=#FFC100>" + hoverStructure.bonusProperties.radius + ")</color> / Slow(<color=#8EC6F8>" + hoverStructure.bonusProperties.slowDurationInSeconds.ToString("F1") + ")</color>";
+        else if (hoverStructure.bonusProperties.AoE)
+            bonusText += "<color=white>Bonus: AoE(<color=#FFC100>" + hoverStructure.bonusProperties.radius + ")</color>";
+        else if (hoverStructure.bonusProperties.slow)
+            bonusText += "<color=white>Bonus: Slow(<color=#8EC6F8>" + (hoverStructure.bonusProperties.slowPercent * 100).ToString("F1") + "%)</color>";
 
-        string attackText = "\n<color=white>Happiness Per Shot: " +
-            (pollution.pollutionPercent > .4f ? "<color=purple>" + (hoverStructure.attackProperties.satisfaction * (1 - pollution.pollutionPercent)).ToString("F1") + "</color>" :
+        string attackText = "\n<color=white>Total Damage: " + structureCell.totalDamage +
+            "\n<color=white>Happiness Per Shot: " +
+            (pollution.pollutionPercent > .4f ? "<color=#E89AF8>" + (hoverStructure.attackProperties.satisfaction * (1 - pollution.pollutionPercent)).ToString("F1") + "</color>" :
             hoverStructure.attackProperties.satisfaction.ToString("F0")) +
-            "\nShots Per Second: " + hoverStructure.attackProperties.attackSpeed.ToString("F1");
+            "\nShot CD: " + hoverStructure.attackProperties.attackSpeed.ToString("F1");
 
         string sellText;
         if (hoverStructure.canSell)
-            sellText = "<color=white>Sell Price: <color=green>+ $" + hoverStructure.sellPrice+ "</color>";
+            sellText = "<color=white>Sell Price: <color=green>+ $" + hoverStructure.sellPrice + "</color>";
         else
             sellText = "<color=red>Cannot Sell</color>";
 
-        string tooltip = "<u><b><color=black>[" + hoverStructure.structureName + "]</u></b></color>" +
-           "\nSize: " + hoverStructure.size +
+        string tooltip = "<b><color=black>[" + hoverStructure.structureName + "]</b></color>" +
+           "\n<color=white>Size: " + hoverStructure.size +
            "\nRange: " + "Range: " + hoverStructure.range.ToString("F0") +
-           "\n<color=purple>Pollution: " + hoverStructure.pollution.ToString("F0") +
+           "\n<color=#E89AF8>Pollution: " + hoverStructure.pollution.ToString("F0") +
            (hoverStructure.powerStructure ? "\n\n<b><color=yellow>Powers Other Towers</b>\n<color=white>(Does Not Shoot)" : "\n" +
-           (structureCell.isPowered ? "" : "\n<color=red>Requires Power To Shoot") + attackText) +
+           (structureCell.isPowered ? "" : "\n<color=#FF7C75>Requires Power To Shoot") + attackText) +
+           (!string.IsNullOrEmpty(bonusText) ? "\n" + bonusText : "") +
            "\n\n" + sellText + "\n" +
-            (!string.IsNullOrEmpty(requirementText) ? "\n" + requirementText : "") +
-            (!string.IsNullOrEmpty(bonusText) ? "\n" + bonusText : "");
+            (!string.IsNullOrEmpty(requirementText) ? "\n" + requirementText : "");
 
         selectedStructure.tooltipText.text = tooltip;
-        DisplayFactualTooltip(structureCell.structureProperty.name, structureCell.structureProperty.tooltip[Random.Range(0, structureCell.structureProperty.tooltip.Length)]);
+        DisplayFactualTooltip(structureCell.structureProperty.name, structureCell.structureProperty.tooltip[UnityEngine.Random.Range(0, structureCell.structureProperty.tooltip.Length)]);
         currentStructureCell = structureCell;
     }
 
@@ -353,27 +520,29 @@ public class GameManager : MonoBehaviour
         StructurePropertyScriptableObject hoverStructure = structureProperties[structureID];
 
         string requirementText = "";
-        if(hoverStructure.buildRestrictions == StructurePropertyScriptableObject.LocationRestrictions.Water)
+        if (hoverStructure.buildRestrictions == StructurePropertyScriptableObject.LocationRestrictions.Water)
             requirementText = "<color=white>Requires: <color=#00E0FF>Water</color>";
-        else if(hoverStructure.buildRestrictions == StructurePropertyScriptableObject.LocationRestrictions.Land)
+        else if (hoverStructure.buildRestrictions == StructurePropertyScriptableObject.LocationRestrictions.Land)
             requirementText = "<color=white>Requires: <color=#8DCA42>Land</color>";
 
         string bonusText = "";
-        if(hoverStructure.bonusProperties.AoE && hoverStructure.bonusProperties.slow)
-            bonusText = "<color=white>Bonus: <color=#FFC100>AoE(" + hoverStructure.bonusProperties.radius + "</color>) / <color=blue>Slow(" + hoverStructure.bonusProperties.slowDurationInSeconds.ToString("F1") + "</color>)";
-        else if (hoverStructure.bonusProperties.AoE)
-            bonusText = "<color=white>Bonus: <color=#FFC100>AoE(" + hoverStructure.bonusProperties.radius + "</color>)";
-        else if (hoverStructure.bonusProperties.slow)
-            bonusText = "<color=white>Bonus: <color=blue>Slow(" + (hoverStructure.bonusProperties.slowPercent * 100).ToString("F1") + "%</color>)";
-
         if (hoverStructure.bonusProperties.emitFromTower)
-            bonusText += "\n<color=#763200>[Emits From Tower]</color>";
+            bonusText = "\n<color=#FFBA88>[Emits From Tower]</color>\n";
+        if (hoverStructure.bonusProperties.AoE && hoverStructure.bonusProperties.slow)
+            bonusText += "<color=white>Bonus: <color=#FFC100>AoE(" + hoverStructure.bonusProperties.radius + ")</color> / <color=#8EC6F8>Slow(" + (hoverStructure.bonusProperties.slowPercent * 100).ToString("F1") + "%)</color>";
+        else if (hoverStructure.bonusProperties.AoE)
+            bonusText += "<color=white>Bonus: <color=#FFC100>AoE(" + hoverStructure.bonusProperties.radius + ")</color>";
+        else if (hoverStructure.bonusProperties.slow)
+            bonusText += "<color=white>Bonus: <color=#8EC6F8>Slow(" + (hoverStructure.bonusProperties.slowPercent * 100).ToString("F1") + "%)</color>";
+
+        //if (hoverStructure.bonusProperties.emitFromTower)
+        //    bonusText += "\n<color=#763200>[Emits From Tower]</color>";
 
 
-        string attackText = "\n\n<color=red>Requires Power To Shoot\n<color=white>Happiness Per Shot: " + 
-            (pollution.pollutionPercent > .4f ? "<color=purple>" + (hoverStructure.attackProperties.satisfaction * (1 - pollution.pollutionPercent)).ToString("F1") + "</color>" :
+        string attackText = "\n<color=#FF7C75>Requires Power To Shoot\n<color=white>Happiness Per Shot: " +
+            (pollution.pollutionPercent > .4f ? "<color=#E89AF8>" + (hoverStructure.attackProperties.satisfaction * (1 - pollution.pollutionPercent)).ToString("F1") + "</color>" :
             hoverStructure.attackProperties.satisfaction.ToString("F0")) +
-            "\nShots Per Second: " + hoverStructure.attackProperties.attackSpeed.ToString("F1");
+            "\nShot CD: " + hoverStructure.attackProperties.attackSpeed.ToString("F1");
 
 
         string sellText;
@@ -382,16 +551,16 @@ public class GameManager : MonoBehaviour
         else
             sellText = "<color=red>Cannot Sell</color>";
 
-        string tooltip = "<u><b><color=black>[" + hoverStructure.structureName + "]</u></b></color>" +
-            "\nSize: " + hoverStructure.size +
+        string tooltip = "<b><color=black>[" + hoverStructure.structureName + "]</b></color>" +
+            (hoverStructure.powerStructure ? "\n<b><color=yellow>Powers Other Towers</b>\n<color=white>(Does Not Shoot)" : attackText) +
+            "\n\n<color=white>Size: " + hoverStructure.size +
             "\nRange: " + "Range: " + hoverStructure.range.ToString("F0") +
-            "\n<color=purple>Pollution: " + hoverStructure.pollution.ToString("F0") +
-            (hoverStructure.powerStructure ? "\n\n<b><color=yellow>Powers Other Towers</b>\n<color=white>(Does Not Shoot)" : attackText) +
-            "\n\n" + (HasEnoughMoney(hoverStructure.cost) ? "<color=green>" : "<color=red>") + "Cost: " + hoverStructure.cost +
+            "\n<color=#E89AF8>Pollution: " + hoverStructure.pollution.ToString("F0") +
+            (!string.IsNullOrEmpty(bonusText) ? "\n" + bonusText : "") +
+            "\n\n" + (HasEnoughMoney(hoverStructure.cost) ? "<color=green>" : "<color=#FF7C75>") + "Cost: " + hoverStructure.cost +
             " <color=white>-- <color=yellow>(Current: " + economy.currentMoney + ")" +
             "\n" + sellText + "\n" +
-            (!string.IsNullOrEmpty(requirementText) ? "\n" + requirementText : "") +
-            (!string.IsNullOrEmpty(bonusText) ? "\n" + bonusText : "");
+            (!string.IsNullOrEmpty(requirementText) ? "\n" + requirementText : "");
 
         mouseTooltip.tooltipText.text = tooltip;
         //mouseTooltip.tooltipTransform.localPosition = Input.mousePosition - mouseTooltip.myCanvas.transform.localPosition;
@@ -416,6 +585,8 @@ public class GameManager : MonoBehaviour
         economy.currentMoney -= moneyToRemove;
         economy.currentMoneyText.text = "$ " + economy.currentMoney;
         UpdateButtons();
+        if (moneyAddedRoutine != null) StopCoroutine(moneyAddedRoutine);
+        moneyAddedRoutine = StartCoroutine(UpdateMoneyOverTime(economy.currentMoney + moneyToRemove));
     }
 
     public void AddMoney(int moneyToAdd)
@@ -423,7 +594,7 @@ public class GameManager : MonoBehaviour
         economy.currentMoney += moneyToAdd;
         economy.currentMoneyText.text = "$ " + economy.currentMoney;
         if (moneyAddedRoutine != null) StopCoroutine(moneyAddedRoutine);
-        moneyAddedRoutine = StartCoroutine(AddMoneyOverTime(economy.currentMoney - moneyToAdd));
+        moneyAddedRoutine = StartCoroutine(UpdateMoneyOverTime(economy.currentMoney - moneyToAdd));
 
         UpdateButtons();
     }
@@ -436,10 +607,10 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    IEnumerator AddMoneyOverTime(int startMoney)
+    IEnumerator UpdateMoneyOverTime(int startMoney)
     {
         float lerpTime = .25f;
-       
+
         for (float i = 0; i < lerpTime; i += Time.deltaTime)
         {
             float perc = i / lerpTime;
@@ -466,7 +637,7 @@ public class GameManager : MonoBehaviour
     #region Pollution
     public static bool HasEnoughPollution(int amount)
     {
-        return (amount  + singleton.pollution.currentPollution) <= singleton.pollution.totalAllowedPollution;
+        return (amount + singleton.pollution.currentPollution) <= singleton.pollution.totalAllowedPollution;
     }
 
     public void AddPollution(int pollutionAmount)
@@ -477,6 +648,64 @@ public class GameManager : MonoBehaviour
         pollution.pollutionText.text = "<u>Pollution</u>\n" + (pollution.pollutionPercent * 100).ToString("F0") + "%";
         if (pollutionFillRoutine != null) StopCoroutine(pollutionFillRoutine);
         pollutionFillRoutine = StartCoroutine(UpdateFillImageOverTime());
+        CheckPollutionAmount(pollutionAmount > 0);
+    }
+
+    void CheckPollutionAmount(bool adding = false)
+    {
+        bool changed = false;
+        if (adding)
+        {
+            while (pollutionLevel < pollution.pollutionChangeThresholds.Length && pollution.pollutionPercent >= pollution.pollutionChangeThresholds[pollutionLevel])
+            {
+                if (pollutionLevel >= pollution.pollutionChangeThresholds.Length)
+                    break;
+
+                //Debug.Log("Increasing Pollution");
+                pollutionLevel++;
+                changed = true;
+            }
+        }
+        else
+        {
+            //Decrease Pollution Level
+            while (pollutionLevel >= 1 && pollution.pollutionPercent < pollution.pollutionChangeThresholds[pollutionLevel - 1])
+            {
+                if (pollutionLevel <= 0)
+                    break;
+
+                changed = true;
+                pollutionLevel--;
+            }
+        }
+
+        if (changed)
+            UpdatePollution();
+    }
+
+    void UpdatePollution()
+    {
+        string pollutionString = "Pollution Threat <color=green>Neutralized</color>";
+        //Debug.Log("Updated Pollution: " + pollutionLevel);
+        switch (pollutionLevel)
+        {
+            case 1:
+                pollutionString = "Pollution Threat Minor -- Happiness Reduced <color=purple>40%!</color>";
+                break;
+            case 2:
+                pollutionString = "Pollution Threat Medium -- Happiness Reduced <color=purple>75%!</color>";
+                break;
+            case 3:
+                pollutionString = "Pollution Threat Major -- <color=purple>Happiness Reduced 90%!</color>";
+                break;
+            case 4:
+                pollutionString = "<color=purple>Pollution Level Maximum -- Happiness Reduced 100%!</color>";
+                break;
+
+        }
+
+        PlayNotification(pollutionString);
+        onPollutionChange?.Invoke();
     }
 
     IEnumerator UpdateFillImageOverTime()
@@ -498,6 +727,8 @@ public class GameManager : MonoBehaviour
 public struct MainMenuUI
 {
     public GameObject uiObject;
+    public RectTransform gameLogo;
+    public GameObject restartButton;
     public GameObject[] uiPanels;
 }
 
@@ -545,6 +776,7 @@ public struct WaveRecapUI
     public TMP_Text playersHappyRecap;
     public TMP_Text playersReallyHappyRecap;
     public TMP_Text nextWaveText;
+    public TMP_Text currentText;
 }
 
 [System.Serializable]
@@ -553,8 +785,20 @@ public struct Pollution
     public int totalAllowedPollution;
     public int currentPollution;
     public float pollutionPercent;
+    public float[] pollutionChangeThresholds;
     public TMP_Text pollutionText;
     public Image pollutionFillImage;
+}
+
+[System.Serializable]
+public struct FastForward
+{
+    internal enum FF_State { Normal, Medium, Maximum};
+
+    public Image speedChangeImage;
+    public Sprite[] ffIcons;
+
+    internal FF_State ffState;
 }
 
 [System.Serializable]
@@ -573,18 +817,24 @@ public class PathManager
     public GameObject endAreaText;
     public GameObject sendWaveButton;
     public GameObject currentWaveUI;
-    public TMP_Text waveCountText;
+    public GameObject nextWaveUI;
+    public TMP_Text currentWaveText;
+    public TMP_Text satisfiedText;
     public TMP_Text fullySatisfiedText;
     public TMP_Text livesLostText;
+    public TMP_Text nextWaveText;
+    public TMP_Text nextWaveTimer;
 
     internal GamePath currentPath;
 
     internal int totalAllowedLeaks = 10;
     internal int totalLeaks = 0;
+    internal bool warning = false;
+
     internal void Leak()
     {
         totalLeaks++;
-        livesLostText.text = "Lives Lost: " + totalLeaks + " / " + totalAllowedLeaks;
+        livesLostText.text = ": " + totalLeaks + " / " + totalAllowedLeaks;
 
         if(totalLeaks > totalAllowedLeaks)
         {
@@ -594,12 +844,16 @@ public class PathManager
 
     internal void SetupNextPath(int newPathID)
     {
+        currentWaveText.text = "Wave " + (GameManager.singleton.totalWaves + 1);
+
         currentPath = gamePaths[newPathID];
         currentPathParticles.SetActive(true);
         startAreaText.SetActive(true);
         endAreaText.SetActive(true);
         sendWaveButton.SetActive(true);
         currentWaveUI.SetActive(false);
+        nextWaveUI.SetActive(true);
+        UpdateNextWaveText();
 
         startAreaText.transform.position = currentPath.transform.position + currentPath.waypoints[0];
         endAreaText.transform.position = currentPath.transform.position + currentPath.waypoints[currentPath.waypoints.Length - 1];
@@ -610,14 +864,22 @@ public class PathManager
         //Show Info on next Wave Here Somewhere
     }
 
+    internal void UpdateNextWaveText()
+    {
+        nextWaveText.text = "<size=25>Next Wave</size>" +
+            "\nPeople: " + GameManager.currentGeneration.unitsPerWave +
+            "\nHeath: " + GameManager.CurrentGenHappiness() +
+            "\nSpeed: " + (GameManager.currentGeneration.unitSpeed * GameManager.GetCurrentGenSpeed()).ToString("F2");
+    }
+
     internal void UpdateSatisfiedCount(int satisfied, int total)
     {
-        waveCountText.text = "Happy\n#: " + satisfied + " / "+ total;
+        satisfiedText.text = satisfied + " / "+ total;
     }
 
     internal void UpdateFullySatisfiedCount(int satisfied, int total)
     {
-        fullySatisfiedText.text = "Super Happy\n#: " + satisfied + " / " + total;
+        fullySatisfiedText.text = satisfied + " / " + total;
     }
 
     internal void StartPath()
@@ -626,10 +888,12 @@ public class PathManager
         startAreaText.SetActive(false);
         endAreaText.SetActive(false);
         sendWaveButton.SetActive(false);
+        nextWaveUI.SetActive(false);
         currentWaveUI.SetActive(true);
-        waveCountText.text = "Happy\n#:  " + 0 / currentPath.totalSpawnCount;
-        fullySatisfiedText.text = "Super Happy\n#: " + 0 / currentPath.totalSpawnCount;
+        satisfiedText.text = 0 + " / " + GameManager.currentGeneration.unitsPerWave;
+        fullySatisfiedText.text = 0 + " / " + GameManager.currentGeneration.unitsPerWave;
         currentPath.SendWave();
+        warning = false;
     }
 }
 

@@ -7,6 +7,7 @@ public class GenerationScriptableObject : ScriptableObject
 {
     public int unitsPerWave = 5;
     public int waveEndBonus = 100;
+    public float buildTime = 30.0f;
     public float unitSpawnSpeed = .25f;
 
     public float unitHappiness = 100;

@@ -23,6 +23,9 @@ public class GroundUnit : MonoBehaviour
     float currentSpeed = 5.0f;
     float currentSatisfiedPercent = .1f;
     float currentFullySatisfiedPercent = .1f;
+
+    float currentSatisfaction = 0.0f;
+
     //float 
     Vector3 destination;
 
@@ -42,29 +45,31 @@ public class GroundUnit : MonoBehaviour
 
         if(GameManager.singleton.pollution.pollutionPercent > .4f)
         {
-            satisfyAmount = 1 - GameManager.singleton.pollution.pollutionPercent;
+            satisfyAmount = satisfyAmount * (1 - GameManager.singleton.pollution.pollutionPercent);
         }
+
+        currentSatisfaction += satisfyAmount;
 
         if (satisfied)
         {
-            currentFullySatisfiedPercent = Mathf.Clamp01(currentFullySatisfiedPercent + (satisfyAmount / GameManager.currentGeneration.unitFullHappiness));
-            fullySatisfiedHeartImage.fillAmount = currentFullySatisfiedPercent;
 
-            if (currentFullySatisfiedPercent >= 1.0f)
+            currentSatisfiedPercent = (currentSatisfaction - GameManager.CurrentGenHappiness()) / GameManager.CurrentGenFullHappiness();
+            fullySatisfiedHeartImage.fillAmount = currentSatisfiedPercent;
+
+            if (currentSatisfiedPercent >= 1.0f)
             {
                 completedHeartImage.enabled = true;
-                onFullySatisfied?.Invoke(this);
                 fullySatisfied = true;
+                onFullySatisfied?.Invoke(this);
             }
         }
         else
         {
-            currentSatisfiedPercent = Mathf.Clamp01(currentSatisfiedPercent + (satisfyAmount / GameManager.currentGeneration.unitHappiness));
+            currentSatisfiedPercent = currentSatisfaction / GameManager.CurrentGenHappiness();
             heartImage.fillAmount = currentSatisfiedPercent;
 
             if (currentSatisfiedPercent >= 1.0f)
             {
-                onSatisfied?.Invoke(this);
                 satisfied = true;
                 fullySatisfiedHeartImage.gameObject.SetActive(true);
                 smileFace.SetActive(true);
@@ -72,6 +77,8 @@ public class GroundUnit : MonoBehaviour
                 LeanTween.scale(smileFace, smileFace.transform.localScale * 1.15f, .25f).setLoopPingPong().setEaseInExpo();
                 LeanTween.move(smileFace, smileFace.transform.position + Vector3.up * 1.15f, 2.0f).setEasePunch();
                 Destroy(smileFace, 2.5f);
+                onSatisfied?.Invoke(this);
+                currentSatisfiedPercent = 0.0f;
             }
         }
     }
@@ -93,7 +100,7 @@ public class GroundUnit : MonoBehaviour
 
     internal void SetPath(GamePath newPath)
     {
-        mySpeed = GameManager.currentGeneration.unitSpeed * Random.Range(.95f, 1.05f) * (1 + (GameManager.waveNum * .5f));
+        mySpeed = GameManager.currentGeneration.unitSpeed * Random.Range(.95f, 1.05f) * GameManager.GetCurrentGenSpeed();
         currentSpeed = mySpeed;
         currentPath = newPath;
         runningPath = true;
@@ -101,6 +108,11 @@ public class GroundUnit : MonoBehaviour
         heartImage.fillAmount = currentSatisfiedPercent;
         fullySatisfiedHeartImage.fillAmount = 0.0f;
         LeanTween.scale(gameObject, transform.localScale * 1.15f, .25f).setLoopPingPong().setEaseSpring();
+
+        if(currentSpeed > 3.0f)
+        {
+            minDistanceToNextNode = Mathf.Lerp(.25f, .75f, currentSpeed / 10);
+        }
     }
 
     void SetNextWaypoint()

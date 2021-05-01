@@ -42,6 +42,7 @@ public class CameraController : MonoBehaviour
         MoveToDestination(0);
         gameplayMenu.SetActive(true);
         startGameMenu.SetActive(false);
+        GameManager.cheating = false;
         GameManager.singleton.StartNewGame();
     }
 
@@ -51,6 +52,7 @@ public class CameraController : MonoBehaviour
         gameplayMenu.SetActive(true);
         startGameMenu.SetActive(false);
         cheatsMenu.SetActive(true);
+        GameManager.cheating = true;
         GameManager.singleton.StartNewGame();
     }
 
@@ -75,7 +77,7 @@ public class CameraController : MonoBehaviour
     {
         if(destination != Vector3.zero)
         {
-            transform.position = Vector3.Lerp(transform.position, destination, Time.deltaTime * 2);
+            transform.position = Vector3.Lerp(transform.position, destination, Time.deltaTime * 5);
 
             if(Vector3.Distance(transform.position, destination) < .1f)
             {

@@ -79,8 +79,6 @@ public class GamePath : MonoBehaviour
                 EndWave();
             }
         }
-
-        //TODO: Give Points Here
     }
 
     private void OnUnitSatisfied(GroundUnit unit)
@@ -89,9 +87,6 @@ public class GamePath : MonoBehaviour
         satisfiedCount++;
 
         GameManager.singleton.UnitSatisfied();
-        
-        
-        //TODO: Give Points Here
     }
 
     private void OnUnitFinishedPath(GroundUnit finishedUnit)
@@ -108,11 +103,6 @@ public class GamePath : MonoBehaviour
                 roundActive = false;
                 EndWave();
             }
-        }
-
-        if (finishedUnit.fullySatisfied)
-        {
-            //Give Bonus Point Here
         }
 
         if (!finishedUnit.satisfied)
