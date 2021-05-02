@@ -126,7 +126,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 93f6f29855a26f441916625c0433babc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  projectileSpeed: 5
+  projectileSpeed: 10
   hitEffect: {fileID: 1467846158189622754, guid: b7ddd722ac43346418134f09f22a2dbc, type: 3}
   aoeEffect: {fileID: 1749098736579353840, guid: e59253477d2618f40b4ae9713eae9cf1, type: 3}
   aoeSlowEffect: {fileID: 5497759383200596367, guid: d10027abae2125c44856a4f2317bd4fd, type: 3}

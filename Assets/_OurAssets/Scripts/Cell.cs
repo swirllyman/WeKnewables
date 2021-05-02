@@ -9,6 +9,7 @@ public class Cell : MonoBehaviour, ISelectable
     public Color highlightColor;
     public Color hiddenColor;
     public Transform rangeIndicator_Power;
+    public SpriteRenderer noPowerIcon;
 
     public AttackTrigger attackTrigger;
 
@@ -62,6 +63,7 @@ public class Cell : MonoBehaviour, ISelectable
                 em.constantMax = GameManager.pollutionLevel * 3;
 
                 emission.rateOverTime = em;
+                pollutedParticles.Play();
             }
         }
         else
@@ -245,7 +247,7 @@ public class Cell : MonoBehaviour, ISelectable
             rangeIndicator_Power.transform.parent = null;
             rangeIndicator_Power.transform.position = GetMidPoint();
 
-            rangeIndicator_Power.transform.localScale = Vector3.one * ((structureProperty.range * 2) + 1 + ((structureProperty.size - 1) * .7f));
+            rangeIndicator_Power.transform.localScale = Vector3.one * ((structureProperty.range * 2) + 1 + ((structureProperty.size - 1) * .7f) - .5f);
             rangeIndicator_Power.transform.parent = transform;
         }
         else
@@ -318,7 +320,7 @@ public class Cell : MonoBehaviour, ISelectable
                             Cell cell = nearbyCells[i].GetComponent<Cell>();
                             if (cell != null)
                             {
-                                cell.isPowered = false;
+                                cell.SetPowered(false);
                             }
                         }
                     }
@@ -338,13 +340,39 @@ public class Cell : MonoBehaviour, ISelectable
         }
     }
 
+    void SetPowered(bool powered)
+    {
+        isPowered = powered;
+
+        //if (isChild)
+        //{
+        //    if (!parentCell.structureProperty.powerStructure)
+        //    {
+        //        parentCell.noPowerIcon.enabled = !powered;
+        //    }
+        //}
+        /*else*/ if(!isChild && hasStructure)
+        {
+            if (!structureProperty.powerStructure)
+            {
+                noPowerIcon.transform.position = GetMidPoint();
+                noPowerIcon.transform.localScale = Vector3.one * structureProperty.size;
+                noPowerIcon.enabled = !powered;
+            }
+        }
+        //if (hasStructure &! structureProperty.powerStructure)
+        //{
+        //    noPowerIcon.enabled = powered;
+        //}
+    }
+
     internal void PowerArea()
     {
         if (structureProperty.powerStructure)
         {
             List<Collider2D> nearbyCells = new List<Collider2D>();
             ContactFilter2D contactFilter = new ContactFilter2D();
-            if (Physics2D.OverlapBox(GetMidPoint(), Vector2.one * ((structureProperty.range * 2) + ((structureProperty.size - 1) * .5f) - 1), 0, contactFilter, nearbyCells) > 0)
+            if (Physics2D.OverlapBox(GetMidPoint(), Vector2.one * ((structureProperty.range * 2) + ((structureProperty.size - 1) * .5f) - 1.25f), 0, contactFilter, nearbyCells) > 0)
             {
                 for (int i = 0; i < nearbyCells.Count; i++)
                 {
@@ -353,7 +381,7 @@ public class Cell : MonoBehaviour, ISelectable
                         Cell cell = nearbyCells[i].GetComponent<Cell>();
                         if (cell != null)
                         {
-                            cell.isPowered = true;
+                            cell.SetPowered(true);
                         }
                     }
                 }

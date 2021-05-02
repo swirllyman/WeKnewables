@@ -204,7 +204,7 @@ public class GridInteraction : MonoBehaviour
 
     void CheckInput()
     {
-        if (Input.GetMouseButtonDown(1))
+        if (Input.GetMouseButtonDown(1) && Tutorial.tutorialFinished)
         {
             ActivateSelectMode();
 
@@ -257,8 +257,8 @@ public class GridInteraction : MonoBehaviour
         GameManager.singleton.StructurePlaced();
 
         currentCell.SetStructure(GameManager.singleton.currentStructureID);
+        SelectCurrentCell();
         currentStructures.Add(currentCell);
-
 
         for (int i = 0; i < currentStructures.Count; i++)
         {
@@ -270,6 +270,12 @@ public class GridInteraction : MonoBehaviour
 
         if (!Input.GetKey(KeyCode.LeftShift))
             ActivateSelectMode();
+
+        if (!Tutorial.tutorialFinished)
+        {
+            FindObjectOfType<Tutorial>().PlayNext();
+        }
+        SelectCurrentCell();
     }
 
     #endregion
@@ -300,23 +306,28 @@ public class GridInteraction : MonoBehaviour
         if (Input.GetMouseButtonDown(0) && !EventSystem.current.IsPointerOverGameObject())
         {
 
-            if(selectedCell != null)
+            if(selectedCell != null && Tutorial.tutorialFinished)
             {
                 RemoveSelected();
             }
 
-            if (currentCell != null && (currentCell.hasStructure || currentCell.isChild))
+            SelectCurrentCell();
+        }
+    }
+
+    void SelectCurrentCell()
+    {
+        if (currentCell != null && (currentCell.hasStructure || currentCell.isChild))
+        {
+            if (currentCell.isChild)
             {
-                if (currentCell.isChild)
-                {
-                    selectedCell = currentCell.parentCell;
-                }
-                else
-                {
-                    selectedCell = currentCell;
-                }
-                selectedCell.Select();
+                selectedCell = currentCell.parentCell;
             }
+            else
+            {
+                selectedCell = currentCell;
+            }
+            selectedCell.Select();
         }
     }
 
