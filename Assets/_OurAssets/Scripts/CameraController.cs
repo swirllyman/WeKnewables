@@ -1,5 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -12,6 +10,8 @@ public class CameraController : MonoBehaviour
     public Vector2 boundsX;
     public Vector2 boundsY;
     public Vector2 minMaxZoom;
+    public Color[] backgroundColors;
+    public float colorChangeSpeed = 0.1f;
     public float dragSpeed = 2;
     public float dragSpeedMaxZoom = 15;
     public Rigidbody2D myBody;
@@ -26,6 +26,9 @@ public class CameraController : MonoBehaviour
     Vector3 prev;
     Vector3 vel;
 
+    int currentColorIndex = 0;
+    float colorLerpTime = 0f;
+
     Vector3 destination;
 
     private void Start()
@@ -35,6 +38,11 @@ public class CameraController : MonoBehaviour
         gameplayMenu.SetActive(false);
         cheatsMenu.SetActive(false);
         startGameMenu.SetActive(true);
+
+        if (backgroundColors != null && backgroundColors.Length > 0)
+        {
+            Camera.main.backgroundColor = backgroundColors[0];
+        }
     }
 
     public void PlayIntialGameStart()
@@ -75,9 +83,27 @@ public class CameraController : MonoBehaviour
 
     void Update()
     {
+        if (backgroundColors != null && backgroundColors.Length > 1)
+        {
+            colorLerpTime += Time.deltaTime * colorChangeSpeed;
+
+            int nextColorIndex = (currentColorIndex + 1) % backgroundColors.Length;
+            Color startColor = backgroundColors[currentColorIndex];
+            Color endColor = backgroundColors[nextColorIndex];
+
+            Camera.main.backgroundColor = Color.Lerp(startColor, endColor, colorLerpTime);
+
+            if (colorLerpTime >= 1f)
+            {
+                colorLerpTime = 0f;
+                currentColorIndex = nextColorIndex;
+            }
+        }
+
         if(destination != Vector3.zero)
         {
-            transform.position = Vector3.Lerp(transform.position, destination, Time.deltaTime * 5);
+            // Using this formula for framerate-independent smoothing
+            transform.position = Vector3.Lerp(transform.position, destination, 1 - Mathf.Exp(-5 * Time.deltaTime));
 
             if(Vector3.Distance(transform.position, destination) < .1f)
             {
@@ -99,7 +125,8 @@ public class CameraController : MonoBehaviour
 
         if (zooming)
         {
-            Camera.main.orthographicSize = Mathf.Lerp(Camera.main.orthographicSize, zoom, Time.deltaTime * 2);
+            // Using this formula for framerate-independent smoothing
+            Camera.main.orthographicSize = Mathf.Lerp(Camera.main.orthographicSize, zoom, 1 - Mathf.Exp(-2 * Time.deltaTime));
         }
 
         vel = (transform.position - prev) / Time.deltaTime;
@@ -111,25 +138,25 @@ public class CameraController : MonoBehaviour
         if(transform.position.x < boundsX.x)
         {
             transform.position = new Vector3(boundsX.x, transform.position.y, transform.position.z);
-            myBody.velocity = Vector3.zero;
+            myBody.linearVelocity = Vector3.zero;
         }
 
         if (transform.position.x > boundsX.y)
         {
             transform.position = new Vector3(boundsX.y, transform.position.y, transform.position.z);
-            myBody.velocity = Vector3.zero;
+            myBody.linearVelocity = Vector3.zero;
         }
 
         if (transform.position.y < boundsY.x)
         {
             transform.position = new Vector3(transform.position.x, boundsY.x, transform.position.z);
-            myBody.velocity = Vector3.zero;
+            myBody.linearVelocity = Vector3.zero;
         }
 
         if (transform.position.y > boundsY.y)
         {
             transform.position = new Vector3(transform.position.x, boundsY.y, transform.position.z);
-            myBody.velocity = Vector3.zero;
+            myBody.linearVelocity = Vector3.zero;
         }
     }
 
@@ -141,7 +168,7 @@ public class CameraController : MonoBehaviour
         {
             dragOrigin = Input.mousePosition;
             dragging = true;
-            myBody.velocity = Vector3.zero;
+            myBody.linearVelocity = Vector3.zero;
         }
 
         if (Input.GetMouseButtonUp(0))

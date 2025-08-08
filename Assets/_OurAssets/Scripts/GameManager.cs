@@ -37,7 +37,7 @@ public class GameManager : MonoBehaviour
     public Placeholder placeholder;
     public PathManager pathManager;
     public Economy economy;
-
+    public TopWaveLeaderboard m_Leaderboard;
 
     internal int currentStructureID;
     internal int nextPathID = 0;
@@ -61,6 +61,7 @@ public class GameManager : MonoBehaviour
 
     private void Awake()
     {
+        StopFF();
         singleton = this;
         factualTooltip.uiObject.SetActive(false);
         selectedStructure.uiObject.SetActive(false);
@@ -88,10 +89,10 @@ public class GameManager : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Space))
-        {
-            DisplayMouseTooltip();
-        }
+        // if (Input.GetKeyDown(KeyCode.Space))
+        // {
+        //     DisplayMouseTooltip();
+        // }
 
         if (placeholder.show)
         {
@@ -151,7 +152,7 @@ public class GameManager : MonoBehaviour
         return currentGeneration.unitMoney * (1 + (singleton.totalSets * 10));
     }
 
-    void StopFF()
+    public void StopFF()
     {
         fastForward.ffState = FastForward.FF_State.Normal;
         Time.timeScale = 1.0f;
@@ -178,7 +179,7 @@ public class GameManager : MonoBehaviour
                 break;
 
             case FastForward.FF_State.Maximum:
-                Time.timeScale = 15.0f;
+                Time.timeScale = 10.0f;
                 fastForward.speedChangeImage.sprite = fastForward.ffIcons[0];
                 break;
         }
@@ -199,7 +200,7 @@ public class GameManager : MonoBehaviour
 
     IEnumerator ResetNotification(float holdTime)
     {
-        yield return new WaitForSeconds(holdTime);
+        yield return new WaitForSecondsRealtime(holdTime);
         gameNotification.notificationText.transform.localScale = Vector3.one;
         LeanTween.scale(gameNotification.notificationText.rectTransform, Vector3.zero, .25f).setEaseInExpo();
     }
@@ -301,13 +302,22 @@ public class GameManager : MonoBehaviour
     IEnumerator FailedGameRoutine()
     {
         PlayNotification("Game Failed. Too Many Unfulfilled People.", 3.0f);
-        yield return new WaitForSeconds(3.0f);
+        yield return new WaitForSecondsRealtime(3.0f);
         PlayNotification("Wave: " + totalWaves + ", Gen: " + (currentGen + 1), 60.0f);
-        yield return new WaitForSeconds(1.0f);
+
+        if (!cheating)
+        {
+            if (m_Leaderboard == null)
+                m_Leaderboard = FindFirstObjectByType<TopWaveLeaderboard>();
+
+            m_Leaderboard.CheckScoreAndSubmit(totalWaves);
+        }
+
+        yield return new WaitForSecondsRealtime(1.0f);
         mainMenuUI.restartButton.SetActive(true);
-        yield return new WaitForSeconds(60.0f);
+        yield return new WaitForSecondsRealtime(60.0f);
         PlayNotification("Game Restarting in 1 second.");
-        yield return new WaitForSeconds(1.0f);
+        yield return new WaitForSecondsRealtime(1.0f);
         SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 
@@ -335,10 +345,10 @@ public class GameManager : MonoBehaviour
     {
         recap = true;
         PlayNotification("Wave " + totalWaves + " Complete!", 1.5f);
-        yield return new WaitForSeconds(.5f);
+        yield return new WaitForSecondsRealtime(.5f);
         cameraController.MoveToOverview();
 
-        yield return new WaitForSeconds(1.0f);
+        yield return new WaitForSecondsRealtime(1.0f);
         PlayNotification("Wave Bonus: " + currentGeneration.waveEndBonus, 1.5f);
         waveRecap.uiObject.SetActive(true);
         waveRecap.playersHappyRecap.text = "";
@@ -375,13 +385,13 @@ public class GameManager : MonoBehaviour
         for (int i = 3; i > 0; i--)
         {
             waveRecap.nextWaveText.text = "Next Wave Starting In: " + i;
-            yield return new WaitForSeconds(1.0f);
+            yield return new WaitForSecondsRealtime(1.0f);
         }
 
         waveRecap.nextWaveText.text = "";
         waveRecap.uiObject.SetActive(false);
 
-        yield return new WaitForSeconds(.25f);
+        yield return new WaitForSecondsRealtime(.25f);
 
         StartCoroutine(ShowNextPath(.5f));
     }
@@ -403,26 +413,26 @@ public class GameManager : MonoBehaviour
             {
                 totalSets++;
             }
-            yield return new WaitForSeconds(1.5f);
+            yield return new WaitForSecondsRealtime(1.5f);
         }
 
         int pathID = nextPathID;
         ShowNextPath();
 
-        yield return new WaitForSeconds(1.0f);
+        yield return new WaitForSecondsRealtime(1.0f);
 
         //PlayNotification("Wave " + totalWaves + " Starting");
         waveNum = (waveNum + 1) % pathManager.gamePaths.Length;
-        yield return new WaitForSeconds(waitTime);
+        yield return new WaitForSecondsRealtime(waitTime);
         cameraController.MoveToDestination(pathID);
-        yield return new WaitForSeconds(waitTime);
+        yield return new WaitForSecondsRealtime(waitTime);
         PlayNotification("Build Phase!");
         if (fastForward.ffState != FastForward.FF_State.Normal)
             StopFF();
 
         if (!cheating)
         {
-            yield return new WaitForSeconds(1.5f);
+            yield return new WaitForSecondsRealtime(1.5f);
             PlayNotification("Wave " + totalWaves + " Starting In " + currentGeneration.buildTime.ToString("F0") + " Seconds!");
         }
     }

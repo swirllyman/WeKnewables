@@ -12,6 +12,8 @@ public class Tutorial : MonoBehaviour
     public float waitTimeBetweenDialogue = 3.5f;
     [TextArea(3, 5)]
     public string[] dialogueStrings;
+    [TextArea(3, 5)]
+    public string tutorialFinishString;
 
     public GameObject tutorialObject;
     public GameObject clickToContinueObject;
@@ -38,6 +40,9 @@ public class Tutorial : MonoBehaviour
     public Button sellButton;
     public Button FFButton;
     public Toggle farmToggle;
+
+    bool tutorialOver = false;
+    bool restarting = false;
     // Start is called before the first frame update
     void Awake()
     {
@@ -54,7 +59,7 @@ public class Tutorial : MonoBehaviour
 
     private void Update()
     {
-        if (Input.anyKeyDown &! waitingOnExternalInput)
+        if (Input.anyKeyDown & !waitingOnExternalInput)
         {
             if (playingDialogue)
             {
@@ -68,14 +73,18 @@ public class Tutorial : MonoBehaviour
             }
         }
 
-        if (waiting &! waitingOnExternalInput)
+        if (waiting & !waitingOnExternalInput)
         {
+            if (tutorialOver &! restarting)
+            {
+                StartCoroutine(RestartSequence());
+                return;
+            }
             currentWaitTime += Time.deltaTime;
             nextTextFillImage.fillAmount = currentWaitTime / waitTimeBetweenDialogue;
             if (currentWaitTime >= waitTimeBetweenDialogue)
             {
                 StartNextEquence();
-
             }
         }
     }
@@ -90,17 +99,19 @@ public class Tutorial : MonoBehaviour
     {
         if (!tutorialFinished)
         {
+            tutorialOver = false;
+            restarting = false;
             tutorialAnimator.SetTrigger("PlayTutorial");
             tutorialObject.SetActive(true);
             LeanTween.scale(clickToContinueObject, clickToContinueObject.transform.localScale * 1.05f, .5f).setLoopPingPong().setEaseInSine();
             StartNextEquence();
 
-            foreach(Button b in allButtons)
+            foreach (Button b in allButtons)
             {
                 b.interactable = false;
             }
 
-            foreach(Toggle t in allToggles)
+            foreach (Toggle t in allToggles)
             {
                 t.interactable = false;
             }
@@ -111,7 +122,7 @@ public class Tutorial : MonoBehaviour
     {
         if (!tutorialFinished)
         {
-            if(currentDialogueID - 1 == 3)
+            if (currentDialogueID - 1 == 3)
             {
                 gasButton.interactable = false;
             }
@@ -176,6 +187,23 @@ public class Tutorial : MonoBehaviour
         }
     }
 
+    void StartEndSequence()
+    {
+        waiting = false;
+        currentWaitTime = 0.0f;
+        nextTextFillImage.fillAmount = 0.0f;
+        clickToContinueObject.SetActive(false);
+
+        if (playingDialogue)
+        {
+            playingDialogue = false;
+            StopCoroutine(currentDialogueRoutine);
+        }
+
+        playingDialogue = true;
+        currentDialogueRoutine = StartCoroutine(PlayFinishDialogue());
+    }
+
     bool CheckForDialogueAnim()
     {
         return currentDialogueID != 0 && currentDialogueID != 1 && currentDialogueID != 2 && currentDialogueID != 8 && currentDialogueID != 14/*&& currentDialogueID != 5*/ /*&& currentDialogueID != 2*/;
@@ -188,12 +216,12 @@ public class Tutorial : MonoBehaviour
 
     IEnumerator PlayNextDialogue()
     {
-        if(currentDialogueID == 1)
+        if (currentDialogueID == 1)
         {
             GameManager.singleton.cameraController.MoveToOverview();
         }
 
-        if(currentDialogueID == 3)
+        if (currentDialogueID == 3)
         {
             GameManager.singleton.cameraController.MoveToDestination(0);
             gasButton.interactable = true;
@@ -246,6 +274,33 @@ public class Tutorial : MonoBehaviour
         FinishDialogue();
     }
 
+    IEnumerator PlayFinishDialogue()
+    {
+        GameManager.singleton.StopFF();
+        GameManager.singleton.cameraController.MoveToOverview();
+        tutorialAnimator.SetTrigger("PlayNext");
+        waitingOnExternalInput = true;
+
+        int totalTextCount = tutorialFinishString.Length;
+        int currentCount = 0;
+        dialogueText.text = tutorialFinishString;
+
+        while (currentCount < totalTextCount)
+        {
+            currentCount = Mathf.Clamp(currentCount + 1, 0, totalTextCount);
+            dialogueText.maxVisibleCharacters = currentCount;
+            yield return new WaitForSeconds(textSpeed);
+        }
+
+        waitingOnExternalInput = false;
+
+        dialogueText.maxVisibleCharacters = dialogueText.text.Length;
+        playingDialogue = false;
+        waiting = true;
+        tutorialOver = true;
+        clickToContinueObject.SetActive(true);
+    }
+
     void FinishDialogue()
     {
         dialogueText.maxVisibleCharacters = dialogueText.text.Length;
@@ -266,7 +321,7 @@ public class Tutorial : MonoBehaviour
         tutorialObject.SetActive(false);
     }
 
-    
+
     internal void TutorialFinished()
     {
         PlayerPrefs.SetInt("TutorialFinished", 1);
@@ -278,6 +333,25 @@ public class Tutorial : MonoBehaviour
     {
         GameManager.singleton.PlayNotification("Tutorial Complete!");
         yield return new WaitForSeconds(2.0f);
+        tutorialAnimator.SetTrigger("PlayTutorial");
+        tutorialObject.SetActive(true);
+        LeanTween.scale(clickToContinueObject, clickToContinueObject.transform.localScale * 1.05f, .5f).setLoopPingPong().setEaseInSine();
+        StartEndSequence();
+
+        foreach (Button b in allButtons)
+        {
+            b.interactable = false;
+        }
+
+        foreach (Toggle t in allToggles)
+        {
+            t.interactable = false;
+        }
+    }
+
+    IEnumerator RestartSequence()
+    {
+        restarting = true;
         GameManager.singleton.PlayNotification("Game Restarting in 1 Second!");
         yield return new WaitForSeconds(1.0f);
         SceneManager.LoadScene(SceneManager.GetActiveScene().name);

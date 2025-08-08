@@ -273,7 +273,7 @@ public class GridInteraction : MonoBehaviour
 
         if (!Tutorial.tutorialFinished)
         {
-            FindObjectOfType<Tutorial>().PlayNext();
+            FindFirstObjectByType<Tutorial>().PlayNext();
         }
         SelectCurrentCell();
     }
