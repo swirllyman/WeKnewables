@@ -296,6 +296,7 @@ public class Cell : MonoBehaviour, ISelectable
             totalDamage = 0;
             pollutedParticles = null;
             hasStructure = false;
+            noPowerIcon.enabled = false;
             Destroy(currentStructureObject);
 
             if (isParent)

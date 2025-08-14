@@ -129,7 +129,14 @@ public class CameraController : MonoBehaviour
             Camera.main.orthographicSize = Mathf.Lerp(Camera.main.orthographicSize, zoom, 1 - Mathf.Exp(-2 * Time.deltaTime));
         }
 
-        vel = (transform.position - prev) / Time.deltaTime;
+        if (Time.deltaTime > 0)
+        {
+            vel = (transform.position - prev) / Time.deltaTime;
+        }
+        else
+        {
+            vel = Vector3.zero;
+        }
         prev = transform.position;
     }
 
@@ -174,7 +181,8 @@ public class CameraController : MonoBehaviour
         if (Input.GetMouseButtonUp(0))
         {
             dragging = false;
-            myBody.AddForce(vel, ForceMode2D.Impulse);
+            if(vel != Vector3.zero)
+                myBody.AddForce(vel, ForceMode2D.Impulse);
         }
 
         if (dragging)

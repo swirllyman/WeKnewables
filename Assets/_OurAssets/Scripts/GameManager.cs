@@ -1,10 +1,15 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+
+
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 
 public class GameManager : MonoBehaviour
 {
@@ -32,12 +37,15 @@ public class GameManager : MonoBehaviour
     public WaveRecapUI waveRecap;
     public Pollution pollution;
     public FastForward fastForward;
+    public PauseButton pauseButton;
+    public GameObject restartMenu;
 
     [Header("Classes")]
     public Placeholder placeholder;
     public PathManager pathManager;
     public Economy economy;
     public TopWaveLeaderboard m_Leaderboard;
+
 
     internal int currentStructureID;
     internal int nextPathID = 0;
@@ -46,6 +54,7 @@ public class GameManager : MonoBehaviour
 
     bool recap = false;
     bool buildPhase = true;
+    bool paused = false;
     float buildPhaseTimer = 0.0f;
 
     Cell currentStructureCell;
@@ -65,6 +74,7 @@ public class GameManager : MonoBehaviour
         singleton = this;
         factualTooltip.uiObject.SetActive(false);
         selectedStructure.uiObject.SetActive(false);
+        restartMenu.SetActive(false);
         HideMouseTooltip();
         economy.currentMoneyText.text = "$ " + economy.currentMoney;
 
@@ -106,19 +116,19 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        if (!cheating && buildPhase &!FirstWave())
+        if (!cheating && buildPhase & !FirstWave())
         {
-            if(buildPhaseTimer >= 0.0f)
+            if (buildPhaseTimer >= 0.0f)
             {
                 buildPhaseTimer -= Time.deltaTime;
                 pathManager.nextWaveTimer.text = "Starting in " + buildPhaseTimer.ToString("F1");
-                if (buildPhaseTimer <= 10.0f &! pathManager.warning)
+                if (buildPhaseTimer <= 10.0f & !pathManager.warning)
                 {
                     pathManager.warning = true;
                     PlayNotification("Wave Starting In 10 Seconds!");
                 }
 
-                if(buildPhaseTimer <= 0.0f)
+                if (buildPhaseTimer <= 0.0f)
                 {
                     buildPhase = false;
                     SendWave();
@@ -132,24 +142,78 @@ public class GameManager : MonoBehaviour
         return (totalWaves == 0 && totalSets == 0 && currentGen == 0);
     }
 
+    public bool WaveActive()
+    {
+        if (pathManager != null && pathManager.currentPath != null)
+            return pathManager.currentPath.roundActive;
+        else
+            return false;
+    }
+
+    public static int GetCurrentGenSpawnAmount()
+    {
+        var totalSpawnCount = currentGeneration.unitsPerWave;
+
+        if (singleton.totalSets == 1)
+            totalSpawnCount += 40;
+        else if (singleton.totalSets >= 2)
+            totalSpawnCount += 50 * (singleton.totalSets + 1) / 2;
+
+        return totalSpawnCount;
+    }
     public static float CurrentGenHappiness()
     {
-        return currentGeneration.unitHappiness * (1 + (singleton.totalSets * 10));
+        return CalculateHappiness(currentGeneration.unitHappiness);
     }
 
     public static float CurrentGenFullHappiness()
     {
-        return currentGeneration.unitFullHappiness * (1 + (singleton.totalSets * 10));
+        return CalculateHappiness(currentGeneration.unitFullHappiness);
+    }
+
+    static float CalculateHappiness(float currentHappinessRequired)
+    {
+        if (singleton.totalSets > 5)
+            currentHappinessRequired *= 100 * singleton.totalSets;
+        else if (singleton.totalSets > 3)
+            currentHappinessRequired *= 15 * singleton.totalSets;
+        // else if (singleton.totalSets > 1)
+        //     currentHappinessRequired *= 5 * singleton.totalSets;
+        else if (singleton.totalSets > 0)
+            currentHappinessRequired *= 5 * singleton.totalSets;
+
+        return currentHappinessRequired;
     }
 
     public static float GetCurrentGenSpeed()
     {
-        return (1 + (waveNum * .25f)) * (1 + singleton.totalSets);
+        return singleton.totalSets >= 1 ? (singleton.totalSets + 1) / 2 : 1;
     }
 
-    public static float GetCurrentGenMoney()
+    public static int GetCurrentGenMoney()
     {
-        return currentGeneration.unitMoney * (1 + (singleton.totalSets * 10));
+        if (singleton.totalSets == 0 && currentGen == 0)
+            return 25;
+            
+        var money = currentGeneration.unitMoney;
+        if (singleton.totalSets > 5)
+            money += singleton.totalSets * 10;
+        else if (singleton.totalSets > 3)
+            money += singleton.totalSets * 5;
+        else
+            money += singleton.totalSets * 2;
+
+        return money;
+    }
+
+    public static int GetWaveEndBonus()
+    {
+        return currentGeneration.waveEndBonus + singleton.totalSets * 100;
+    }
+
+    public static int GetGenerationEndBonus()
+    {
+        return currentGeneration.generationEndBonus + singleton.totalSets * 100;
     }
 
     public void StopFF()
@@ -169,7 +233,7 @@ public class GameManager : MonoBehaviour
 
         switch (fastForward.ffState)
         {
-            case FastForward.FF_State.Normal :
+            case FastForward.FF_State.Normal:
                 StopFF();
                 break;
 
@@ -207,6 +271,34 @@ public class GameManager : MonoBehaviour
     #endregion
 
     #region UI Buttons
+    public void RestartGameButtonPressed()
+    {
+        restartMenu.SetActive(true);
+        SetPause(true);
+    }
+
+    public void SetPause(bool pause)
+    {
+        if (pause)
+        {
+            paused = true;
+            Time.timeScale = 0.0f;
+            pauseButton.pauseImage.sprite = pauseButton.pauseButtonIcons[0];
+            fastForward.FFButton.interactable = false;
+        }
+        else
+        {
+            paused = false;
+            pauseButton.pauseImage.sprite = pauseButton.pauseButtonIcons[1];
+            Time.timeScale = 1.0f;
+            fastForward.FFButton.interactable = true;
+        }
+    }
+
+    public void TogglePause()
+    {
+        SetPause(!paused);
+    }
     public void MuteToggle()
     {
         MusicManager.singleton.ToggleMute();
@@ -249,15 +341,20 @@ public class GameManager : MonoBehaviour
         SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 
+    public void EndWaveEarly()
+    {
+        pathManager.EndWaveEarly();
+    }
+
     //Called Fom UI Button
     public void SendWave()
     {
         StopCoroutine(pathRoutine);
         pathManager.StartPath();
         totalWaves++;
-        waveRecap.currentText.text = "Wave " + totalWaves + " / Gen " + (currentGen + 1);
+        waveRecap.currentText.text = $"Wave {totalWaves} / Gen {currentGen + 1} - {totalSets}";
         pathManager.currentWaveText.text = "Wave " + totalWaves;
-        PlayNotification("Wave " + totalWaves+ " Has Started!");
+        PlayNotification("Wave " + totalWaves + " Has Started!");
         buildPhase = false;
     }
 
@@ -303,7 +400,7 @@ public class GameManager : MonoBehaviour
     {
         PlayNotification("Game Failed. Too Many Unfulfilled People.", 3.0f);
         yield return new WaitForSecondsRealtime(3.0f);
-        PlayNotification("Wave: " + totalWaves + ", Gen: " + (currentGen + 1), 60.0f);
+        PlayNotification($"Wave {totalWaves} / Gen {currentGen + 1} - {totalSets}", 60.0f);
 
         if (!cheating)
         {
@@ -333,9 +430,9 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        AddMoney((int)(GetCurrentGenMoney() / 2) * pathManager.currentPath.fullySatisfiedCount);
-        AddMoney((int)GetCurrentGenMoney() * pathManager.currentPath.satisfiedCount);
-        AddMoney(currentGeneration.waveEndBonus);
+        // AddMoney((int)(GetCurrentGenMoney() / 2) * pathManager.currentPath.fullySatisfiedCount);
+        // AddMoney((int)GetCurrentGenMoney() * pathManager.currentPath.satisfiedCount);
+        // AddMoney(currentGeneration.waveEndBonus);
 
         if (endOfRoundRecap != null) StopCoroutine(endOfRoundRecap);
         endOfRoundRecap = StartCoroutine(PostRoundDisplay());
@@ -345,6 +442,7 @@ public class GameManager : MonoBehaviour
     {
         recap = true;
         PlayNotification("Wave " + totalWaves + " Complete!", 1.5f);
+        AddMoney(GetWaveEndBonus());
         yield return new WaitForSecondsRealtime(.5f);
         cameraController.MoveToOverview();
 
@@ -364,24 +462,24 @@ public class GameManager : MonoBehaviour
             float perc = Mathf.Clamp01(i / lerpTime);
             satisfied = Mathf.Lerp(0, pathManager.currentPath.satisfiedCount, perc);
 
-            waveRecap.playersHappyRecap.text = "Happy Players\n" + (int)satisfied + " / " + totalSpawnCount + "\t<color=yellow>+" + (int)(satisfied * currentGeneration.unitMoney);
+            waveRecap.playersHappyRecap.text = "Happy Players\n" + (int)satisfied + " / " + totalSpawnCount + "\t<color=yellow>+" + (int)(satisfied * GetCurrentGenMoney());
             yield return null;
         }
 
         waveRecap.playersHappyRecap.text = "Happy Players\n" + pathManager.currentPath.satisfiedCount + " / " + pathManager.currentPath.totalSpawnCount +
-           "\t<color=yellow>+" + pathManager.currentPath.satisfiedCount * currentGeneration.unitMoney;
+           "\t<color=yellow>+" + pathManager.currentPath.satisfiedCount * GetCurrentGenMoney();
 
         lerpTime = Mathf.Lerp(.25f, 1.0f, pathManager.currentPath.fullySatisfiedCount / totalSpawnCount);
         for (float i = 0.0f; i <= lerpTime; i += Time.deltaTime)
         {
             float perc = Mathf.Clamp01(i / lerpTime);
             fullySatisfied = Mathf.Lerp(0, pathManager.currentPath.fullySatisfiedCount, perc);
-            waveRecap.playersReallyHappyRecap.text = "Very Happy Players<\n" + (int)fullySatisfied + " / " + totalSpawnCount + "\t<color=yellow>+" + (int)(fullySatisfied * currentGeneration.unitMoney);
+            waveRecap.playersReallyHappyRecap.text = "Very Happy Players<\n" + (int)fullySatisfied + " / " + totalSpawnCount + "\t<color=yellow>+" + (int)(fullySatisfied * (GetCurrentGenMoney() * .5f));
             yield return null;
         }
 
         waveRecap.playersReallyHappyRecap.text = "Very Happy Players\n" + pathManager.currentPath.fullySatisfiedCount + " / " + pathManager.currentPath.totalSpawnCount +
-            "\t<color=yellow>+" + pathManager.currentPath.fullySatisfiedCount * currentGeneration.unitMoney;
+            "\t<color=yellow>+" + (int)(pathManager.currentPath.fullySatisfiedCount * (GetCurrentGenMoney() * .5f));
         for (int i = 3; i > 0; i--)
         {
             waveRecap.nextWaveText.text = "Next Wave Starting In: " + i;
@@ -403,13 +501,13 @@ public class GameManager : MonoBehaviour
         buildPhaseTimer = currentGeneration.buildTime;
         if (endOfRoundRecap != null) StopCoroutine(endOfRoundRecap);
         endOfRoundRecap = null;
-        
+
         if (nextPathID == 0)
         {
-            AddMoney((int)currentGeneration.generationEndBonus);
-            currentGen++;
-            PlayNotification("Generation " + currentGen + " Finished! <color=green> +"+ (int)currentGeneration.generationEndBonus+"</color>");
-            if (currentGen % generationProperties.Length == 0)
+            AddMoney(GetGenerationEndBonus());
+            PlayNotification($"Generation {currentGen} - {totalSets} Finished! <color=green> +" + GetGenerationEndBonus() + "</color>");
+            currentGen = (currentGen + 1) % generationProperties.Length;
+            if (currentGen == 0)
             {
                 totalSets++;
             }
@@ -440,7 +538,7 @@ public class GameManager : MonoBehaviour
     internal void ShowNextPath()
     {
         recap = false;
-        currentGeneration = generationProperties[currentGen % generationProperties.Length];
+        currentGeneration = generationProperties[currentGen];
         pathManager.SetupNextPath(nextPathID);
 
         if (pathRoutine != null) StopCoroutine(pathRoutine);
@@ -560,7 +658,7 @@ public class GameManager : MonoBehaviour
            "\nRange: " + "Range: " + hoverStructure.range.ToString("F0") +
            "\n<color=#E89AF8>Pollution: " + hoverStructure.pollution.ToString("F0") +
            (hoverStructure.powerStructure ? "\n\n<b><color=yellow>Powers Other Towers</b>\n<color=white>(Does Not Shoot)" : "\n" +
-            attackText)+
+            attackText) +
            (!string.IsNullOrEmpty(bonusText) ? "\n" + bonusText : "") +
            "\n\n" + sellText + "\n" +
             (!string.IsNullOrEmpty(requirementText) ? "\n" + requirementText : "");
@@ -708,13 +806,14 @@ public class GameManager : MonoBehaviour
 
     internal void UnitFullySatisfied()
     {
-        pathManager.UpdateFullySatisfiedCount(pathManager.currentPath.fullySatisfiedCount, currentGeneration.unitsPerWave);
+        pathManager.UpdateFullySatisfiedCount(pathManager.currentPath.fullySatisfiedCount, GetCurrentGenSpawnAmount());
+        AddMoney((int)(GetCurrentGenMoney() * .5f));
     }
 
     internal void UnitSatisfied()
     {
-        pathManager.UpdateSatisfiedCount(pathManager.currentPath.satisfiedCount, currentGeneration.unitsPerWave);
-        AddMoney(currentGeneration.unitMoney);
+        pathManager.UpdateSatisfiedCount(pathManager.currentPath.satisfiedCount, GetCurrentGenSpawnAmount());
+        AddMoney(GetCurrentGenMoney());
     }
     #endregion
 
@@ -796,7 +895,7 @@ public class GameManager : MonoBehaviour
     {
         float lerpTime = .25f;
         float startPerc = pollution.pollutionFillImage.fillAmount;
-        for (float i = 0; i < lerpTime; i+= Time.deltaTime)
+        for (float i = 0; i < lerpTime; i += Time.deltaTime)
         {
             float perc = i / lerpTime;
             pollution.pollutionFillImage.fillAmount = Mathf.Lerp(startPerc, pollution.pollutionPercent, perc);
@@ -822,11 +921,6 @@ public struct StructureSelectedUI
     public GameObject uiObject;
     public TMP_Text tooltipText;
     public Button selectedButton;
-    //public TMP_Text towerName;
-    //public TMP_Text attackSpeed;
-    //public TMP_Text range;
-    //public TMP_Text satisfaction;
-    //public TMP_Text bonuses;
 }
 
 [System.Serializable]
@@ -874,6 +968,13 @@ public struct Pollution
     public Image pollutionFillImage;
 }
 
+[Serializable]
+public struct PauseButton
+{
+    public Sprite[] pauseButtonIcons;
+    public Image pauseImage;
+}
+
 [System.Serializable]
 public struct FastForward
 {
@@ -881,7 +982,7 @@ public struct FastForward
 
     public Image speedChangeImage;
     public Sprite[] ffIcons;
-
+    public Button FFButton;
     internal FF_State ffState;
 }
 
@@ -925,6 +1026,11 @@ public class PathManager
         }
     }
 
+    internal void EndWaveEarly()
+    {
+        currentPath.EndWaveEarly();
+    }
+
     internal void SetupNextPath(int newPathID)
     {
         currentWaveText.text = "Wave " + (GameManager.singleton.totalWaves + 1);
@@ -948,7 +1054,8 @@ public class PathManager
     internal void UpdateNextWaveText()
     {
         nextWaveText.text = "<size=25>Next Wave</size>" +
-            "\nPeople: " + GameManager.currentGeneration.unitsPerWave +
+        
+            "\nPeople: " + GameManager.GetCurrentGenSpawnAmount() +
             "\nHeath: " + GameManager.CurrentGenHappiness() +
             "\nSpeed: " + (GameManager.currentGeneration.unitSpeed * GameManager.GetCurrentGenSpeed()).ToString("F2");
     }
@@ -1030,3 +1137,20 @@ public class Placeholder
         uiObject.SetActive(false);
     }
 }
+
+#if UNITY_EDITOR
+[CustomEditor(typeof(GameManager))]
+public class GameManagerEditor : Editor
+{
+    public override void OnInspectorGUI()
+    {
+        DrawDefaultInspector();
+
+        GameManager gm = (GameManager)target;
+        GUI.enabled = gm.WaveActive();
+        if (GUILayout.Button("End Wave Early"))
+            gm.EndWaveEarly();
+        GUI.enabled = true;
+    }
+}
+#endif

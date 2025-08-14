@@ -22,7 +22,7 @@ public class GroundUnit : MonoBehaviour
     float mySpeed = 5.0f;
     float currentSpeed = 5.0f;
     float currentSatisfiedPercent = .1f;
-    float currentFullySatisfiedPercent = .1f;
+    // float currentFullySatisfiedPercent = .1f;
 
     float currentSatisfaction = 0.0f;
 

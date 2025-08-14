@@ -15,7 +15,7 @@ public class GamePath : MonoBehaviour
 
     List<GroundUnit> currentUnits;
     
-    bool roundActive = false;
+    internal bool roundActive = false;
     float spawnRate = 1.0f;
     float spawnTimer = 0.0f;
     int currentSpawnCount = 0;
@@ -26,7 +26,7 @@ public class GamePath : MonoBehaviour
         if (!roundActive)
         {
             currentUnits = new List<GroundUnit>();
-            totalSpawnCount = GameManager.currentGeneration.unitsPerWave;
+            totalSpawnCount = GameManager.GetCurrentGenSpawnAmount();
             spawnRate = GameManager.currentGeneration.unitSpawnSpeed;
             fullySatisfiedCount = 0;
             satisfiedCount = 0;
@@ -34,6 +34,12 @@ public class GamePath : MonoBehaviour
             currentSpawnCount = 0;
             roundActive = true;
         }
+    }
+
+    public void EndWaveEarly()
+    {
+        roundActive = false;
+        EndWave();
     }
 
     private void Update()
@@ -68,13 +74,11 @@ public class GamePath : MonoBehaviour
         unit.onFullySatisfied -= OnUnitFullySatisfied;
         fullySatisfiedCount++;
         GameManager.singleton.UnitFullySatisfied();
-        GameManager.singleton.pathManager.UpdateFullySatisfiedCount(fullySatisfiedCount, totalSpawnCount);
         if (currentUnits.Contains(unit))
         {
             currentUnits.Remove(unit);
             if (currentSpawnCount == totalSpawnCount && currentUnits.Count <= 0 & !GameManager.failed)
             {
-                Debug.Log("Wave Finished");
                 roundActive = false;
                 EndWave();
             }
@@ -105,7 +109,7 @@ public class GamePath : MonoBehaviour
             }
         }
 
-        if (!finishedUnit.satisfied)
+        if (!finishedUnit.satisfied && roundActive)
         {
             GameManager.singleton.pathManager.Leak();
         }

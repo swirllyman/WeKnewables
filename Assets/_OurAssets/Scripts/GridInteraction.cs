@@ -284,6 +284,8 @@ public class GridInteraction : MonoBehaviour
     public void ActivateSelectMode()
     {
         GameManager.singleton.placeholder.RemovePlaceholder();
+        GameManager.singleton.selectedStructure.uiObject.SetActive(false);
+
         if (currentCell != null)
         {
             currentCell.DisableHighlight();
